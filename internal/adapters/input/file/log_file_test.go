@@ -43,7 +43,7 @@ func TestLogFileIngestion(t *testing.T) {
 			name: "ShouldFailBecauseFileOpeningFails",
 			watcherFactory: func() (file.FileWatcher, error) {
 				mock := file.NewMockFileWatcher(ctrl)
-				mock.EXPECT().Close().Return(nil)
+				mock.EXPECT().Close().AnyTimes()
 				return mock, nil
 			},
 			fileOpener: func(name string) (file.FileHandle, error) {
