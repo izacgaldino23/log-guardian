@@ -2,6 +2,7 @@ package domain
 
 const (
 	SOURCE_STDIN = "stdin"
+	SOURCE_FILE  = "file"
 )
 
 type LogEvent struct {

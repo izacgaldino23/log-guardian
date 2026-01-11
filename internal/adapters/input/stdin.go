@@ -16,6 +16,7 @@ func NewStdinIngestion(reader io.Reader) *StdinIngestion {
 	return &StdinIngestion{reader: reader}
 }
 
+// Read reads the input from stdin and sends the logs to the output channel
 func (i *StdinIngestion) Read(ctx context.Context, output chan<- domain.LogEvent, errChan chan<- error) {
 	scanner := bufio.NewScanner(i.reader)
 
