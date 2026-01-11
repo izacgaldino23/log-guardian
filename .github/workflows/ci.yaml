@@ -48,4 +48,4 @@ jobs:
           cache: true
           
       - name: Build binary
-        run: go build -o bin/ ./src/cmd
+        run: go build -o bin/ ./cmd
