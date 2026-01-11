@@ -16,15 +16,20 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: "1.25.4"
-          cache: true
+          cache: false
 
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.6
+          version: latest
+          args: --timeout=5m
+          only-new-issues: true
 
   test:
     runs-on: ubuntu-latest
+    
+    permissions:
+      contents: write 
 
     steps:
       - uses: actions/checkout@v4
@@ -33,13 +38,25 @@ jobs:
           go-version: "1.25.4"
           cache: true
 
-      - name: Run unit tests
-        run: go test ./...
+      - name: Run tests
+        run: go test -v -coverprofile=coverage.out ./...
+
+      - name: Check Coverage Threshold
+        env:
+          THRESHOLD: 85
+        run: |
+          COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | sed 's/%//')
+          echo "Current coverage: $COVERAGE%"
+          
+          status=$(echo "$COVERAGE < $THRESHOLD" | bc -l)
+          if [ "$status" -eq 1 ]; then
+            echo "Error: Coverage is below $THRESHOLD%"
+            exit 1
+          fi
 
   build:
     needs: [lint, test]
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -48,4 +65,10 @@ jobs:
           cache: true
           
       - name: Build binary
-        run: go build -o bin/ ./cmd
+        run: go build -v -o bin/log-guardian ./cmd
+        
+      # - name: Archive binary
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: binary
+      #     path: bin/log-guardian

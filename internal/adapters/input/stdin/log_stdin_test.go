@@ -1,10 +1,10 @@
-package input_test
+package stdin_test
 
 import (
 	"bytes"
 	"context"
 	"errors"
-	"log-guardian/internal/adapters/input"
+	"log-guardian/internal/adapters/input/stdin"
 	"log-guardian/internal/core/domain"
 	"strings"
 	"testing"
@@ -24,10 +24,9 @@ func TestStdinIngestion(t *testing.T) {
 		fakeInput := []string{"", "log1", "log2", "log3"}
 
 		reader := bytes.NewReader([]byte(strings.Join(fakeInput, "\n")))
-		stdin := input.NewStdinIngestion(reader)
+		stdin := stdin.NewStdinIngestion(reader)
 
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
+		ctx := t.Context()
 
 		output := make(chan domain.LogEvent)
 		errChan := make(chan error)
@@ -51,7 +50,7 @@ func TestStdinIngestion(t *testing.T) {
 		fakeInput := []string{"log1", "log2", "log3"}
 
 		reader := bytes.NewReader([]byte(strings.Join(fakeInput, "\n")))
-		stdin := input.NewStdinIngestion(reader)
+		stdin := stdin.NewStdinIngestion(reader)
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -82,10 +81,9 @@ func TestStdinIngestion(t *testing.T) {
 
 	t.Run("ScannerError", func(t *testing.T) {
 		reader := &errorReader{}
-		stdin := input.NewStdinIngestion(reader)
+		stdin := stdin.NewStdinIngestion(reader)
 
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
+		ctx := t.Context()
 
 		output := make(chan domain.LogEvent)
 
