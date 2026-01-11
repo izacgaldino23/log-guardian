@@ -22,7 +22,7 @@ jobs:
         uses: golangci/golangci-lint-action@v9
         with:
           version: latest
-          args: --out-format=github-actions --timeout=5m
+          args: --timeout=5m
           only-new-issues: true
 
   test:
