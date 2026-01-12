@@ -95,6 +95,7 @@ func (lf *LogFileIngestion) run(ctx context.Context, output chan<- domain.LogEve
 				return
 			}
 			errChan <- err
+			return
 		}
 	}
 }
