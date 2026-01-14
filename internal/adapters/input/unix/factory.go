@@ -1,13 +1,12 @@
 package unix
 
 import (
-	"net"
 	"time"
 )
 
-func NewNetConnectionFactory() ConnectionFactory {
+func NewNetConnectionFactory(newNetConnection newNetConnection) ConnectionFactory {
 	return func(network, address string, timeout time.Duration) (Conn, error) {
-		conn, err := net.DialTimeout(network, address, timeout)
+		conn, err := newNetConnection(network, address, timeout)
 		if err != nil {
 			return nil, err
 		}

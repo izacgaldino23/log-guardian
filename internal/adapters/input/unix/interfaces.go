@@ -12,4 +12,6 @@ type Conn interface {
 	Read(p []byte) (n int, err error)
 }
 
+type newNetConnection func(network, address string, timeout time.Duration) (Conn, error)
+
 type ConnectionFactory func(network, address string, timeout time.Duration) (Conn, error)

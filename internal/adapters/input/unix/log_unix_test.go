@@ -29,7 +29,7 @@ type testCase struct {
 	input                 string
 	shouldCancelContext   bool
 	useNetPipe            bool
-	mockConnectionFactory unix.ConnectionFactory
+	mockConnectionFactory func(server net.Conn) unix.ConnectionFactory
 	expectedOutput        []domain.LogEvent
 }
 
@@ -41,50 +41,58 @@ func TestUnixIngestion_Read(t *testing.T) {
 		{
 			name:       "ShouldFailInvalidSocketPath",
 			socketPath: ".",
-			mockConnectionFactory: func(network, path string, timeout time.Duration) (unix.Conn, error) {
-				return net.DialTimeout(network, path, timeout)
+			mockConnectionFactory: func(_ net.Conn) unix.ConnectionFactory {
+				return func(network, path string, timeout time.Duration) (unix.Conn, error) {
+					return net.DialTimeout(network, path, timeout)
+				}
 			},
 			expectedError: "dial unix .: connect: An invalid argument was supplied.",
 		},
 		{
 			name:       "ShouldFailWhenGetListenerFromFactory",
 			socketPath: "/tmp/asdf.sock",
-			mockConnectionFactory: func(network, path string, timeout time.Duration) (unix.Conn, error) {
-				return nil, errors.New("some-listener-creation-error")
+			mockConnectionFactory: func(_ net.Conn) unix.ConnectionFactory {
+				return func(network, path string, timeout time.Duration) (unix.Conn, error) {
+					return nil, errors.New("some-listener-creation-error")
+				}
 			},
 			expectedError: "some-listener-creation-error",
 		},
 		{
 			name:       "ShouldFailWhenSetReadDeadline",
 			socketPath: "/tmp/asdf.sock",
-			mockConnectionFactory: func(network, path string, timeout time.Duration) (unix.Conn, error) {
-				mockConn := unix.NewMockConn(ctrl)
-				mockConn.EXPECT().SetReadDeadline(gomock.Any()).Return(errors.New("some-set-read-dead-line-error"))
-				mockConn.EXPECT().Close().AnyTimes()
+			mockConnectionFactory: func(_ net.Conn) unix.ConnectionFactory {
+				return func(network, path string, timeout time.Duration) (unix.Conn, error) {
+					mockConn := unix.NewMockConn(ctrl)
+					mockConn.EXPECT().SetReadDeadline(gomock.Any()).Return(errors.New("some-set-read-dead-line-error"))
+					mockConn.EXPECT().Close().AnyTimes()
 
-				return mockConn, nil
+					return mockConn, nil
+				}
 			},
 			expectedError: "some-set-read-dead-line-error",
 		},
 		{
 			name:       "ShouldFailWhenGetReadTimeoutError",
 			socketPath: "/tmp/asdf.sock",
-			mockConnectionFactory: func(network, path string, timeout time.Duration) (unix.Conn, error) {
-				mockConn := unix.NewMockConn(ctrl)
-				mockConn.EXPECT().SetReadDeadline(gomock.Any()).AnyTimes()
-				mockConn.EXPECT().Close().AnyTimes()
+			mockConnectionFactory: func(_ net.Conn) unix.ConnectionFactory {
+				return func(network, path string, timeout time.Duration) (unix.Conn, error) {
+					mockConn := unix.NewMockConn(ctrl)
+					mockConn.EXPECT().SetReadDeadline(gomock.Any()).AnyTimes()
+					mockConn.EXPECT().Close().AnyTimes()
 
-				mockConn.EXPECT().Read(gomock.Any()).Return(0, context.DeadlineExceeded)
+					mockConn.EXPECT().Read(gomock.Any()).Return(0, context.DeadlineExceeded)
 
-				input := "One result\n"
-				r := bytes.NewBufferString(input)
+					input := "One result\n"
+					r := bytes.NewBufferString(input)
 
-				mockConn.EXPECT().Read(gomock.Any()).DoAndReturn(func(b []byte) (int, error) {
-					return r.Read(b)
-				})
-				mockConn.EXPECT().Read(gomock.Any()).AnyTimes().Return(0, nil)
+					mockConn.EXPECT().Read(gomock.Any()).DoAndReturn(func(b []byte) (int, error) {
+						return r.Read(b)
+					})
+					mockConn.EXPECT().Read(gomock.Any()).AnyTimes().Return(0, nil)
 
-				return mockConn, nil
+					return mockConn, nil
+				}
 			},
 			expectedOutput: []domain.LogEvent{
 				{
@@ -97,21 +105,42 @@ func TestUnixIngestion_Read(t *testing.T) {
 		{
 			name:       "ShouldFailWhenGetNonReadTimeoutError",
 			socketPath: "/tmp/asdf.sock",
-			mockConnectionFactory: func(network, path string, timeout time.Duration) (unix.Conn, error) {
-				mockConn := unix.NewMockConn(ctrl)
-				mockConn.EXPECT().SetReadDeadline(gomock.Any()).AnyTimes()
-				mockConn.EXPECT().Close().AnyTimes()
+			mockConnectionFactory: func(_ net.Conn) unix.ConnectionFactory {
+				return func(network, path string, timeout time.Duration) (unix.Conn, error) {
+					mockConn := unix.NewMockConn(ctrl)
+					mockConn.EXPECT().SetReadDeadline(gomock.Any()).AnyTimes()
+					mockConn.EXPECT().Close().AnyTimes()
 
-				mockConn.EXPECT().Read(gomock.Any()).AnyTimes().Return(0, errors.New("some-read-error"))
+					mockConn.EXPECT().Read(gomock.Any()).AnyTimes().Return(0, errors.New("some-read-error"))
 
-				return mockConn, nil
+					return mockConn, nil
+				}
 			},
 			expectedError:       "some-read-error",
 			shouldCancelContext: true,
 		},
 		{
+			name:       "ShouldFailWhenGetErrorCreatingConnection",
+			socketPath: validSocketPath,
+			mockConnectionFactory: func(client net.Conn) unix.ConnectionFactory {
+				return unix.NewNetConnectionFactory(func(_, _ string, _ time.Duration) (unix.Conn, error) {
+					return nil, errors.New("some-connection-creation-error")
+				})
+			},
+			expectedError: "some-connection-creation-error",
+		},
+		{
 			name:       "ShouldReadEventsSuccessfully",
 			socketPath: validSocketPath,
+			mockConnectionFactory: func(client net.Conn) unix.ConnectionFactory {
+				if client != nil {
+					return unix.NewNetConnectionFactory(func(_, _ string, _ time.Duration) (unix.Conn, error) {
+						return client, nil
+					})
+				}
+
+				return nil
+			},
 			input:      "first line\nsecond line\n\n",
 			useNetPipe: true,
 			expectedOutput: []domain.LogEvent{
@@ -137,21 +166,16 @@ func TestUnixIngestion_Read(t *testing.T) {
 func validateUnixReadTestCase(t *testing.T, c testCase) {
 	t.Run(c.name, func(t *testing.T) {
 		var (
-			server, client    net.Conn
-			connectionFactory = c.mockConnectionFactory
+			server, client net.Conn
 		)
 
 		if c.useNetPipe {
 			server, client = net.Pipe()
 			defer server.Close()
 			defer client.Close()
-
-			connectionFactory = func(network, path string, timeout time.Duration) (unix.Conn, error) {
-				return client, nil
-			}
 		}
 
-		unixIngest := unix.NewUnixIngestion(c.socketPath, connectionFactory, time.Second*1)
+		unixIngest := unix.NewUnixIngestion(c.socketPath, c.mockConnectionFactory(client), time.Second*1)
 
 		done := make(chan struct{})
 		output := make(chan domain.LogEvent, 10)
