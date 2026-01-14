@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"log"
 	"log-guardian/internal/adapters/input/unix"
 	"log-guardian/internal/core/domain"
 	"net"
@@ -14,17 +15,11 @@ import (
 	gomock "go.uber.org/mock/gomock"
 )
 
-type UnixClient struct {
-	socketPath string
-	conn       net.Conn
-}
-
 const validSocketPath = "/tmp/valid.sock"
 
 type testCase struct {
 	name                  string
 	socketPath            string
-	network               string
 	expectedError         string
 	input                 string
 	shouldCancelContext   bool
@@ -191,7 +186,10 @@ func validateUnixReadTestCase(t *testing.T, c testCase) {
 
 		if c.input != "" {
 			go func() {
-				server.Write([]byte(c.input))
+				_, err := server.Write([]byte(c.input))
+				if err != nil {
+					log.Fatal(err)
+				}
 			}()
 		}
 
@@ -208,11 +206,7 @@ func validateUnixReadTestCase(t *testing.T, c testCase) {
 		var receivedError error
 
 	outer:
-		for {
-			if len(outputs) == len(c.expectedOutput) && len(c.expectedOutput) > 0 {
-				break
-			}
-
+		for len(outputs) < len(c.expectedOutput) || len(c.expectedOutput) == 0 {
 			select {
 			case result := <-output:
 				outputs = append(outputs, result)
