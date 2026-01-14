@@ -1,13 +1,16 @@
 package unix
 
-import "net"
+import (
+	"net"
+	"time"
+)
 
-func NewNetListenerFactory() ListenerFactory {
-	return func(network, path string) (Listener, error) {
-		listener, err := net.Listen(network, path)
+func NewNetConnectionFactory() ConnectionFactory {
+	return func(network, address string, timeout time.Duration) (Conn, error) {
+		conn, err := net.DialTimeout(network, address, timeout)
 		if err != nil {
 			return nil, err
 		}
-		return listener, nil
+		return conn, nil
 	}
 }

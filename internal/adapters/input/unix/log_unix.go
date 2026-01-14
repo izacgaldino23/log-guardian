@@ -6,7 +6,6 @@ import (
 	"io"
 	"log-guardian/internal/core/domain"
 	"net"
-	"os"
 	"strings"
 	"time"
 )
@@ -18,68 +17,35 @@ const (
 )
 
 type UnixIngestion struct {
-	socketPath      string
-	listenerFactory ListenerFactory
+	socketPath        string
+	connectionFactory ConnectionFactory
+	timeout           time.Duration
 }
 
-func NewUnixIngestion(socketPath string, listenerFactory ListenerFactory) *UnixIngestion {
+func NewUnixIngestion(socketPath string, connFactory ConnectionFactory, timeout time.Duration) *UnixIngestion {
 	return &UnixIngestion{
-		socketPath:      socketPath,
-		listenerFactory: listenerFactory,
+		socketPath:        socketPath,
+		timeout:           timeout,
+		connectionFactory: connFactory,
 	}
 }
 
 func (u *UnixIngestion) Read(ctx context.Context, output chan<- domain.LogEvent, errChan chan<- error) {
-	if err := os.RemoveAll(u.socketPath); err != nil {
-		u.SendError(ctx, err, errChan)
-		return
-	}
-
-	listener, err := u.listenerFactory("unix", u.socketPath)
+	conn, err := u.connectionFactory("unix", u.socketPath, u.timeout)
 	if err != nil {
 		u.SendError(ctx, err, errChan)
 		return
 	}
 
-	defer os.Remove(u.socketPath)
-	defer listener.Close()
-
 	go func() {
 		<-ctx.Done()
-		listener.Close()
+		conn.Close()
 	}()
-
-	conn := u.TryConnect(ctx, listener, errChan)
-	if conn == nil {
-		return
-	}
 
 	go u.Run(ctx, conn, output, errChan)
 }
 
-func (u *UnixIngestion) TryConnect(ctx context.Context, listener Listener, errChan chan<- error) (conn Conn) {
-	tries := 0
-	var err error
-
-	for tries < maxTries {
-		tries++
-		conn, err = listener.Accept()
-		if err != nil {
-			select {
-			case <-ctx.Done():
-				conn.Close()
-				return nil
-			default:
-				u.SendError(ctx, err, errChan)
-				continue
-			}
-		}
-	}
-
-	return
-}
-
-func (u *UnixIngestion) Run(ctx context.Context, conn net.Conn, output chan<- domain.LogEvent, errChan chan<- error) {
+func (u *UnixIngestion) Run(ctx context.Context, conn Conn, output chan<- domain.LogEvent, errChan chan<- error) {
 	defer conn.Close()
 
 	reader := bufio.NewReaderSize(conn, initialBufSize)
@@ -129,7 +95,6 @@ func (u *UnixIngestion) Emit(ctx context.Context, msg string, output chan<- doma
 
 	select {
 	case <-ctx.Done():
-		return
 	case output <- event:
 	}
 }

@@ -1,16 +1,15 @@
 package unix
 
-import "net"
+import (
+	"time"
+)
 
 //go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
 
-type Listener interface {
-	Accept() (net.Conn, error)
-	Close() error
-}
-
 type Conn interface {
-	net.Conn
+	Close() error
+	SetReadDeadline(time.Time) error
+	Read(p []byte) (n int, err error)
 }
 
-type ListenerFactory func(network, path string) (Listener, error)
+type ConnectionFactory func(network, address string, timeout time.Duration) (Conn, error)
