@@ -20,7 +20,7 @@ import (
 func TestLogFileIngestion(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
-	cases := []struct {
+	testCases := []struct {
 		name                string
 		filePath            string
 		expectError         string
@@ -211,7 +211,7 @@ func TestLogFileIngestion(t *testing.T) {
 		},
 	}
 
-	for _, c := range cases {
+	for _, c := range testCases {
 		t.Run(c.name, func(t *testing.T) {
 			file_path, write, cleanup := setupTempFile(t)
 			defer cleanup()

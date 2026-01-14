@@ -8,24 +8,24 @@ import (
 	"net"
 	"os"
 	"strings"
-	"sync"
 	"time"
 )
 
 const (
 	initialBufSize = 64 * 1024
 	readDeadline   = 2 * time.Second
+	maxTries       = 3
 )
 
 type UnixIngestion struct {
-	socketPath   string
-	listenConfig net.ListenConfig
+	socketPath      string
+	listenerFactory ListenerFactory
 }
 
-func NewUnixIngestion(socketPath string, lc net.ListenConfig) *UnixIngestion {
+func NewUnixIngestion(socketPath string, listenerFactory ListenerFactory) *UnixIngestion {
 	return &UnixIngestion{
-		socketPath:   socketPath,
-		listenConfig: lc,
+		socketPath:      socketPath,
+		listenerFactory: listenerFactory,
 	}
 }
 
@@ -35,7 +35,7 @@ func (u *UnixIngestion) Read(ctx context.Context, output chan<- domain.LogEvent,
 		return
 	}
 
-	listener, err := u.listenConfig.Listen(ctx, "unix", u.socketPath)
+	listener, err := u.listenerFactory("unix", u.socketPath)
 	if err != nil {
 		u.SendError(ctx, err, errChan)
 		return
@@ -44,32 +44,39 @@ func (u *UnixIngestion) Read(ctx context.Context, output chan<- domain.LogEvent,
 	defer os.Remove(u.socketPath)
 	defer listener.Close()
 
-	var wg sync.WaitGroup
 	go func() {
 		<-ctx.Done()
 		listener.Close()
 	}()
 
-	for {
-		conn, err := listener.Accept()
+	conn := u.TryConnect(ctx, listener, errChan)
+	if conn == nil {
+		return
+	}
+
+	go u.Run(ctx, conn, output, errChan)
+}
+
+func (u *UnixIngestion) TryConnect(ctx context.Context, listener Listener, errChan chan<- error) (conn Conn) {
+	tries := 0
+	var err error
+
+	for tries < maxTries {
+		tries++
+		conn, err = listener.Accept()
 		if err != nil {
 			select {
 			case <-ctx.Done():
-				wg.Wait()
-				return
+				conn.Close()
+				return nil
 			default:
 				u.SendError(ctx, err, errChan)
 				continue
 			}
 		}
-
-		wg.Add(1)
-		go func(c net.Conn) {
-			defer wg.Done()
-			u.Run(ctx, conn, output, errChan)
-		}(conn)
-
 	}
+
+	return
 }
 
 func (u *UnixIngestion) Run(ctx context.Context, conn net.Conn, output chan<- domain.LogEvent, errChan chan<- error) {
@@ -108,6 +115,7 @@ func (u *UnixIngestion) SendError(ctx context.Context, err error, errChan chan<-
 	select {
 	case <-ctx.Done():
 	case errChan <- err:
+	case <-time.After(time.Second * 1):
 	}
 }
 
