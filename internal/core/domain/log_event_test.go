@@ -55,13 +55,13 @@ func TestNewLogEvent(t *testing.T) {
 			message:  "Empty metadata test",
 			severity: domain.LOG_LEVEL_DEBUG,
 			metadata: map[string]interface{}{},
-			idGen:    func() domain.IDGenerator { 
+			idGen: func() domain.IDGenerator {
 				mockGenerateID := domain.NewMockIDGenerator(ctrl)
 				mockGenerateID.EXPECT().Generate().AnyTimes().Return("", errors.New("error generating id"))
 
 				return mockGenerateID
 			},
-			wantErr:  true,
+			wantErr: true,
 		},
 	}
 
@@ -70,7 +70,7 @@ func TestNewLogEvent(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockGenerator := func () domain.IDGenerator {
+			mockGenerator := func() domain.IDGenerator {
 				if tt.idGen != nil {
 					return tt.idGen()
 				}

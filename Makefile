@@ -2,6 +2,7 @@
 	test-coverage
 	lint
 	format
+	check-all
 
 test-coverage:
 	go test -covermode=count -coverprofile=cover.out ./...
@@ -12,3 +13,5 @@ lint: format
 
 format:
 	go fmt ./...
+
+check-all: lint test-coverage
