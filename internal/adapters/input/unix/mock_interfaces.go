@@ -55,30 +55,30 @@ func (mr *MockConnMockRecorder) Close() *gomock.Call {
 }
 
 // Read mocks base method.
-func (m *MockConn) Read(p []byte) (int, error) {
+func (m *MockConn) Read(b []byte) (int, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Read", p)
+	ret := m.ctrl.Call(m, "Read", b)
 	ret0, _ := ret[0].(int)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Read indicates an expected call of Read.
-func (mr *MockConnMockRecorder) Read(p any) *gomock.Call {
+func (mr *MockConnMockRecorder) Read(b any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Read", reflect.TypeOf((*MockConn)(nil).Read), p)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Read", reflect.TypeOf((*MockConn)(nil).Read), b)
 }
 
 // SetReadDeadline mocks base method.
-func (m *MockConn) SetReadDeadline(arg0 time.Time) error {
+func (m *MockConn) SetReadDeadline(t time.Time) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SetReadDeadline", arg0)
+	ret := m.ctrl.Call(m, "SetReadDeadline", t)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // SetReadDeadline indicates an expected call of SetReadDeadline.
-func (mr *MockConnMockRecorder) SetReadDeadline(arg0 any) *gomock.Call {
+func (mr *MockConnMockRecorder) SetReadDeadline(t any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetReadDeadline", reflect.TypeOf((*MockConn)(nil).SetReadDeadline), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetReadDeadline", reflect.TypeOf((*MockConn)(nil).SetReadDeadline), t)
 }
