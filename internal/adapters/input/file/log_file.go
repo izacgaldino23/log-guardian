@@ -90,11 +90,13 @@ func (lf *LogFileIngestion) run(ctx context.Context, output chan<- domain.LogEve
 			if event.Has(fsnotify.Write) {
 				lf.handleWrite(reader, output, errChan)
 			}
-		case err, ok := <-lf.watcher.Errors():
-			if !ok {
-				return
+		case err := <-lf.watcher.Errors():
+			if err == nil {
+				continue
 			}
+
 			errChan <- err
+			return
 		}
 	}
 }
