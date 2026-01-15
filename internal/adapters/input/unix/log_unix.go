@@ -3,6 +3,7 @@ package unix
 import (
 	"bufio"
 	"context"
+	"fmt"
 	"io"
 	"log-guardian/internal/core/domain"
 	"net"
@@ -11,9 +12,10 @@ import (
 )
 
 const (
-	initialBufSize = 64 * 1024
-	readDeadline   = 2 * time.Second
+	initialBufSize = 4096
+	readDeadline   = 5 * time.Second
 	maxTries       = 3
+	maxMessageSize = 1024 * 1024
 )
 
 type UnixIngestion struct {
@@ -73,6 +75,11 @@ func (u *UnixIngestion) Run(ctx context.Context, conn Conn, output chan<- domain
 			continue
 		}
 
+		if len(line) > maxMessageSize {
+			u.SendError(ctx, fmt.Errorf("message too large: %d bytes", len(line)), errChan)
+			return
+		}
+
 		u.Emit(ctx, line, output)
 	}
 }
@@ -81,7 +88,6 @@ func (u *UnixIngestion) SendError(ctx context.Context, err error, errChan chan<-
 	select {
 	case <-ctx.Done():
 	case errChan <- err:
-	case <-time.After(time.Second * 1):
 	}
 }
 

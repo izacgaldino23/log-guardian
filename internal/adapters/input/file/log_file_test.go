@@ -20,6 +20,9 @@ import (
 func TestLogFileIngestion(t *testing.T) {
 	t.Parallel()
 
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
 	testCases := []struct {
 		name                string
 		filePath            string
@@ -32,7 +35,6 @@ func TestLogFileIngestion(t *testing.T) {
 		{
 			name: "ShouldFailBecauseWatcherInitializationFails",
 			watcherFactory: func() (file.FileWatcher, error) {
-				ctrl := gomock.NewController(t)
 				return file.NewMockFileWatcher(ctrl), errors.New("error-creating-watcher")
 			},
 			fileOpener: func(name string) (file.FileHandle, error) {
@@ -43,7 +45,6 @@ func TestLogFileIngestion(t *testing.T) {
 		{
 			name: "ShouldFailBecauseFileOpeningFails",
 			watcherFactory: func() (file.FileWatcher, error) {
-				ctrl := gomock.NewController(t)
 				mock := file.NewMockFileWatcher(ctrl)
 				mock.EXPECT().Close().AnyTimes()
 				return mock, nil
@@ -56,13 +57,11 @@ func TestLogFileIngestion(t *testing.T) {
 		{
 			name: "ShouldFailBecauseFileSeekFails",
 			watcherFactory: func() (file.FileWatcher, error) {
-				ctrl := gomock.NewController(t)
 				mock := file.NewMockFileWatcher(ctrl)
 				mock.EXPECT().Close().AnyTimes()
 				return mock, nil
 			},
 			fileOpener: func(name string) (file.FileHandle, error) {
-				ctrl := gomock.NewController(t)
 				mockFile := file.NewMockFileHandle(ctrl)
 				mockFile.EXPECT().Seek(gomock.Any(), io.SeekEnd).Return(int64(0), errors.New("some-seek-error"))
 				mockFile.EXPECT().Close().Return(nil)
@@ -73,7 +72,6 @@ func TestLogFileIngestion(t *testing.T) {
 		{
 			name: "ShouldFailBecauseFileWatcherAddFails",
 			watcherFactory: func() (file.FileWatcher, error) {
-				ctrl := gomock.NewController(t)
 				mockWatcher := file.NewMockFileWatcher(ctrl)
 				mockWatcher.EXPECT().Close().AnyTimes()
 				mockWatcher.EXPECT().Add("file_path").Return(errors.New("some-watcher-add-error"))
@@ -81,7 +79,6 @@ func TestLogFileIngestion(t *testing.T) {
 				return mockWatcher, nil
 			},
 			fileOpener: func(name string) (file.FileHandle, error) {
-				ctrl := gomock.NewController(t)
 				mockFile := file.NewMockFileHandle(ctrl)
 				mockFile.EXPECT().Seek(gomock.Any(), io.SeekEnd).Return(int64(0), nil)
 				mockFile.EXPECT().Close().AnyTimes()
@@ -93,7 +90,6 @@ func TestLogFileIngestion(t *testing.T) {
 		{
 			name: "ShouldEndBecauseContextIsCanceled",
 			watcherFactory: func() (file.FileWatcher, error) {
-				ctrl := gomock.NewController(t)
 				mockWatcher := file.NewMockFileWatcher(ctrl)
 				mockWatcher.EXPECT().Close().AnyTimes()
 				mockWatcher.EXPECT().Add(gomock.Any()).AnyTimes()
@@ -110,7 +106,6 @@ func TestLogFileIngestion(t *testing.T) {
 		{
 			name: "ShouldSkipBecauseEventIsEmpty",
 			watcherFactory: func() (file.FileWatcher, error) {
-				ctrl := gomock.NewController(t)
 				mockWatcher := file.NewMockFileWatcher(ctrl)
 				mockWatcher.EXPECT().Close().AnyTimes()
 				mockWatcher.EXPECT().Add(gomock.Any()).AnyTimes()
@@ -129,7 +124,6 @@ func TestLogFileIngestion(t *testing.T) {
 		{
 			name: "ShouldSkipBecauseEventIsNotWriteKind",
 			watcherFactory: func() (file.FileWatcher, error) {
-				ctrl := gomock.NewController(t)
 				mockWatcher := file.NewMockFileWatcher(ctrl)
 				mockWatcher.EXPECT().Close().AnyTimes()
 				mockWatcher.EXPECT().Add(gomock.Any()).AnyTimes()
@@ -158,7 +152,6 @@ func TestLogFileIngestion(t *testing.T) {
 		{
 			name: "ShouldFailBecauseReadStringFails",
 			watcherFactory: func() (file.FileWatcher, error) {
-				ctrl := gomock.NewController(t)
 				mockWatcher := file.NewMockFileWatcher(ctrl)
 				mockWatcher.EXPECT().Close().AnyTimes()
 				mockWatcher.EXPECT().Add(gomock.Any()).AnyTimes()
@@ -173,7 +166,6 @@ func TestLogFileIngestion(t *testing.T) {
 				return mockWatcher, nil
 			},
 			fileOpener: func(name string) (file.FileHandle, error) {
-				ctrl := gomock.NewController(t)
 				mockFile := file.NewMockFileHandle(ctrl)
 				mockFile.EXPECT().Seek(gomock.Any(), io.SeekEnd).Return(int64(0), nil)
 				mockFile.EXPECT().Read(gomock.Any()).Return(0, errors.New("some-read-error"))
@@ -203,7 +195,6 @@ func TestLogFileIngestion(t *testing.T) {
 		{
 			name: "ShouldFailBecauseWatcherErrorsChannelReturnsError",
 			watcherFactory: func() (file.FileWatcher, error) {
-				ctrl := gomock.NewController(t)
 				mockWatcher := file.NewMockFileWatcher(ctrl)
 				mockWatcher.EXPECT().Close().AnyTimes()
 				mockWatcher.EXPECT().Add(gomock.Any()).AnyTimes()

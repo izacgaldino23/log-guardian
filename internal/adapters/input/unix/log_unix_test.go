@@ -23,12 +23,16 @@ type testCase struct {
 	input                 string
 	shouldCancelContext   bool
 	useNetPipe            bool
+	controller            *gomock.Controller
 	mockConnectionFactory func(server net.Conn) unix.ConnectionFactory
 	expectedOutput        []domain.LogEvent
 }
 
 func TestUnixIngestion_Read(t *testing.T) {
 	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
 
 	testCases := []testCase{
 		{
@@ -54,7 +58,6 @@ func TestUnixIngestion_Read(t *testing.T) {
 			socketPath: "/tmp/asdf.sock",
 			mockConnectionFactory: func(_ net.Conn) unix.ConnectionFactory {
 				return func(network, path string, timeout time.Duration) (unix.Conn, error) {
-					ctrl := gomock.NewController(t)
 					mockConn := unix.NewMockConn(ctrl)
 					mockConn.EXPECT().SetReadDeadline(gomock.Any()).Return(errors.New("some-set-read-dead-line-error"))
 					mockConn.EXPECT().Close().AnyTimes()
@@ -69,7 +72,6 @@ func TestUnixIngestion_Read(t *testing.T) {
 			socketPath: "/tmp/asdf.sock",
 			mockConnectionFactory: func(_ net.Conn) unix.ConnectionFactory {
 				return func(network, path string, timeout time.Duration) (unix.Conn, error) {
-					ctrl := gomock.NewController(t)
 					mockConn := unix.NewMockConn(ctrl)
 					mockConn.EXPECT().SetReadDeadline(gomock.Any()).AnyTimes()
 					mockConn.EXPECT().Close().AnyTimes()
@@ -100,7 +102,6 @@ func TestUnixIngestion_Read(t *testing.T) {
 			socketPath: "/tmp/asdf.sock",
 			mockConnectionFactory: func(_ net.Conn) unix.ConnectionFactory {
 				return func(network, path string, timeout time.Duration) (unix.Conn, error) {
-					ctrl := gomock.NewController(t)
 					mockConn := unix.NewMockConn(ctrl)
 					mockConn.EXPECT().SetReadDeadline(gomock.Any()).AnyTimes()
 					mockConn.EXPECT().Close().AnyTimes()
