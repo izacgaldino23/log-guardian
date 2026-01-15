@@ -9,30 +9,30 @@ import (
 	"net"
 	"strings"
 	"time"
-
-	"golang.org/x/time/rate"
 )
 
 const (
 	initialBufSize = 4096
 	readDeadline   = 5 * time.Second
 	maxTries       = 3
-	maxMessageSize = 1024 * 1024
 )
 
 type UnixIngestion struct {
 	socketPath        string
 	connectionFactory ConnectionFactory
 	timeout           time.Duration
-	rateLimiter *rate.Limiter
+	idGen             domain.IDGenerator
+	maxMessageSize    int
 }
 
-func NewUnixIngestion(socketPath string, connFactory ConnectionFactory, timeout time.Duration) *UnixIngestion {
+func NewUnixIngestion(socketPath string, connFactory ConnectionFactory, timeout time.Duration, idGen domain.IDGenerator) *UnixIngestion {
+
 	return &UnixIngestion{
 		socketPath:        socketPath,
 		timeout:           timeout,
 		connectionFactory: connFactory,
-		rateLimiter: rate.NewLimiter(rate.Limit(1000), 100),
+		idGen:             idGen,
+		maxMessageSize:    1024 * 1024,
 	}
 }
 
@@ -79,12 +79,10 @@ func (u *UnixIngestion) Run(ctx context.Context, conn Conn, output chan<- domain
 			continue
 		}
 
-		if len(line) > maxMessageSize {
+		if len(line) > u.maxMessageSize {
 			u.SendError(ctx, fmt.Errorf("message too large: %d bytes", len(line)), errChan)
 			return
 		}
-
-		u.rateLimiter.Wait(ctx)
 
 		u.Emit(ctx, line, output)
 	}
@@ -98,15 +96,10 @@ func (u *UnixIngestion) SendError(ctx context.Context, err error, errChan chan<-
 }
 
 func (u *UnixIngestion) Emit(ctx context.Context, msg string, output chan<- domain.LogEvent) {
-	event := domain.LogEvent{
-		Timestamp: time.Now().Format(time.RFC3339),
-		Source:    domain.SOURCE_UNIX,
-		Severity:  "INFO",
-		Message:   msg,
-	}
+	event, _ := domain.NewLogEvent(domain.SOURCE_UNIX, msg, domain.LOG_LEVEL_INFO, nil, u.idGen)
 
 	select {
 	case <-ctx.Done():
-	case output <- event:
+	case output <- *event:
 	}
 }

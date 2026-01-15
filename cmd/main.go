@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"log-guardian/internal/adapters/infra"
 	"log-guardian/internal/adapters/input/stdin"
 	"log-guardian/internal/core/domain"
 	"os"
@@ -16,7 +17,9 @@ func main() {
 	logChan := make(chan domain.LogEvent, 100)
 	errChan := make(chan error)
 
-	stdin := stdin.NewStdinIngestion(os.Stdin)
+	uuidGenerator := infra.NewUUIDGenerator()
+
+	stdin := stdin.NewStdinIngestion(os.Stdin, uuidGenerator)
 
 	stdin.Read(ctx, logChan, errChan)
 

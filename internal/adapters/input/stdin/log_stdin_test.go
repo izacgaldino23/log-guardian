@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/mock/gomock"
 )
 
 type errorReader struct{}
@@ -20,11 +21,17 @@ func (e *errorReader) Read(p []byte) (n int, err error) {
 }
 
 func TestStdinIngestion(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	idGen := domain.NewMockIDGenerator(ctrl)
+	idGen.EXPECT().Generate().AnyTimes().Return("some-id", nil)
+
 	t.Run("SuccessRead", func(t *testing.T) {
 		fakeInput := []string{"", "log1", "log2", "log3"}
 
 		reader := bytes.NewReader([]byte(strings.Join(fakeInput, "\n")))
-		stdin := stdin.NewStdinIngestion(reader)
+		stdin := stdin.NewStdinIngestion(reader, idGen)
 
 		ctx := t.Context()
 
@@ -50,7 +57,7 @@ func TestStdinIngestion(t *testing.T) {
 		fakeInput := []string{"log1", "log2", "log3"}
 
 		reader := bytes.NewReader([]byte(strings.Join(fakeInput, "\n")))
-		stdin := stdin.NewStdinIngestion(reader)
+		stdin := stdin.NewStdinIngestion(reader, idGen)
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -81,7 +88,7 @@ func TestStdinIngestion(t *testing.T) {
 
 	t.Run("ScannerError", func(t *testing.T) {
 		reader := &errorReader{}
-		stdin := stdin.NewStdinIngestion(reader)
+		stdin := stdin.NewStdinIngestion(reader, idGen)
 
 		ctx := t.Context()
 
