@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"log"
 	"log-guardian/internal/adapters/input/unix"
 	"log-guardian/internal/core/domain"
 	"net"
@@ -29,7 +28,6 @@ type testCase struct {
 }
 
 func TestUnixIngestion_Read(t *testing.T) {
-	ctrl := gomock.NewController(t)
 	t.Parallel()
 
 	testCases := []testCase{
@@ -39,7 +37,7 @@ func TestUnixIngestion_Read(t *testing.T) {
 			mockConnectionFactory: func(_ net.Conn) unix.ConnectionFactory {
 				return unix.NewNetConnectionFactory(net.DialTimeout)
 			},
-			expectedError: "dial unix .: connect: An invalid argument was supplied.",
+			expectedError: "dial unix .: connect:",
 		},
 		{
 			name:       "ShouldFailWhenGetListenerFromFactory",
@@ -56,6 +54,7 @@ func TestUnixIngestion_Read(t *testing.T) {
 			socketPath: "/tmp/asdf.sock",
 			mockConnectionFactory: func(_ net.Conn) unix.ConnectionFactory {
 				return func(network, path string, timeout time.Duration) (unix.Conn, error) {
+					ctrl := gomock.NewController(t)
 					mockConn := unix.NewMockConn(ctrl)
 					mockConn.EXPECT().SetReadDeadline(gomock.Any()).Return(errors.New("some-set-read-dead-line-error"))
 					mockConn.EXPECT().Close().AnyTimes()
@@ -70,6 +69,7 @@ func TestUnixIngestion_Read(t *testing.T) {
 			socketPath: "/tmp/asdf.sock",
 			mockConnectionFactory: func(_ net.Conn) unix.ConnectionFactory {
 				return func(network, path string, timeout time.Duration) (unix.Conn, error) {
+					ctrl := gomock.NewController(t)
 					mockConn := unix.NewMockConn(ctrl)
 					mockConn.EXPECT().SetReadDeadline(gomock.Any()).AnyTimes()
 					mockConn.EXPECT().Close().AnyTimes()
@@ -100,6 +100,7 @@ func TestUnixIngestion_Read(t *testing.T) {
 			socketPath: "/tmp/asdf.sock",
 			mockConnectionFactory: func(_ net.Conn) unix.ConnectionFactory {
 				return func(network, path string, timeout time.Duration) (unix.Conn, error) {
+					ctrl := gomock.NewController(t)
 					mockConn := unix.NewMockConn(ctrl)
 					mockConn.EXPECT().SetReadDeadline(gomock.Any()).AnyTimes()
 					mockConn.EXPECT().Close().AnyTimes()
@@ -188,7 +189,7 @@ func validateUnixReadTestCase(t *testing.T, c testCase) {
 			go func() {
 				_, err := server.Write([]byte(c.input))
 				if err != nil {
-					log.Fatal(err)
+					t.Error(err)
 				}
 			}()
 		}

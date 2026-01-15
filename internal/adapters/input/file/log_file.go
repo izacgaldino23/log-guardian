@@ -91,6 +91,10 @@ func (lf *LogFileIngestion) run(ctx context.Context, output chan<- domain.LogEve
 				lf.handleWrite(reader, output, errChan)
 			}
 		case err := <-lf.watcher.Errors():
+			if err == nil {
+				continue
+			}
+
 			errChan <- err
 			return
 		}
