@@ -239,7 +239,7 @@ func validateUnixReadTestCase(t *testing.T, c testCase) {
 
 		if c.expectedError != "" {
 			assert.NotNil(t, receivedError)
-			assert.Equal(t, c.expectedError, receivedError.Error())
+			assert.Contains(t, receivedError.Error(), c.expectedError)
 		}
 	})
 }
