@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"log-guardian/internal/adapters/input/unix"
 	"log-guardian/internal/core/domain"
 	"net"
+	"strings"
 	"testing"
 	"time"
 
@@ -23,7 +25,6 @@ type testCase struct {
 	input                 string
 	shouldCancelContext   bool
 	useNetPipe            bool
-	controller            *gomock.Controller
 	mockConnectionFactory func(server net.Conn) unix.ConnectionFactory
 	expectedOutput        []domain.LogEvent
 }
@@ -131,6 +132,23 @@ func TestUnixIngestion_Read(t *testing.T) {
 			expectedError: "some-connection-creation-error",
 		},
 		{
+			name:       "ShouldFailBecauseTheLineIsTooLong",
+			socketPath: validSocketPath,
+			mockConnectionFactory: func(client net.Conn) unix.ConnectionFactory {
+				if client != nil {
+					fakeNewNetConnection := func(_, _ string, _ time.Duration) (unix.Conn, error) {
+						return client, nil
+					}
+					return fakeNewNetConnection
+				}
+
+				return nil
+			},
+			input:         func() string { return strings.Repeat("a", 1024*1024+1) + "\n" }(),
+			useNetPipe:    true,
+			expectedError: fmt.Sprintf("message too large: %v bytes", 1024*1024+1),
+		},
+		{
 			name:       "ShouldReadEventsSuccessfully",
 			socketPath: validSocketPath,
 			mockConnectionFactory: func(client net.Conn) unix.ConnectionFactory {
@@ -177,7 +195,7 @@ func validateUnixReadTestCase(t *testing.T, c testCase, idGen domain.IDGenerator
 			defer client.Close()
 		}
 
-			unixIngest := unix.NewUnixIngestion(c.socketPath, c.mockConnectionFactory(client), time.Second*1, idGen)
+		unixIngest := unix.NewUnixIngestion(c.socketPath, c.mockConnectionFactory(client), time.Second*1, idGen)
 
 		done := make(chan struct{})
 		output := make(chan domain.LogEvent, 10)

@@ -1,6 +1,7 @@
 package file_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -17,6 +18,16 @@ import (
 	gomock "go.uber.org/mock/gomock"
 )
 
+type testCase struct {
+	name                string
+	filePath            string
+	expectError         string
+	fileBodyWrite       string
+	shouldCancelContext bool
+	watcherFactory      func() (file.FileWatcher, error)
+	fileOpener          func(name string) (file.FileHandle, error)
+}
+
 func TestLogFileIngestion(t *testing.T) {
 	t.Parallel()
 
@@ -26,15 +37,7 @@ func TestLogFileIngestion(t *testing.T) {
 	idGen := domain.NewMockIDGenerator(ctrl)
 	idGen.EXPECT().Generate().AnyTimes().Return("some-id", nil)
 
-	testCases := []struct {
-		name                string
-		filePath            string
-		expectError         string
-		fileBodyWrite       string
-		shouldCancelContext bool
-		watcherFactory      func() (file.FileWatcher, error)
-		fileOpener          func(name string) (file.FileHandle, error)
-	}{
+	testCases := []testCase{
 		{
 			name: "ShouldFailBecauseWatcherInitializationFails",
 			watcherFactory: func() (file.FileWatcher, error) {
@@ -194,7 +197,6 @@ func TestLogFileIngestion(t *testing.T) {
 			},
 			fileBodyWrite: "hello\nworld\nfinal",
 		},
-		// should fail because watcher.Errors channel returns error
 		{
 			name: "ShouldFailBecauseWatcherErrorsChannelReturnsError",
 			watcherFactory: func() (file.FileWatcher, error) {
@@ -215,72 +217,115 @@ func TestLogFileIngestion(t *testing.T) {
 			},
 			expectError: "some-watch-error",
 		},
+		{
+			name: "ShouldFailBecauseWatcherErrorsChannelReturnsNilError",
+			watcherFactory: func() (file.FileWatcher, error) {
+				mockWatcher := file.NewMockFileWatcher(ctrl)
+				mockWatcher.EXPECT().Close().AnyTimes()
+				mockWatcher.EXPECT().Add(gomock.Any()).AnyTimes()
+
+				errorChan := make(chan error, 1)
+				errorChan <- nil
+				close(errorChan)
+
+				mockWatcher.EXPECT().Errors().AnyTimes().Return(errorChan)
+
+				inputChan := make(chan fsnotify.Event, 1)
+				inputChan <- fsnotify.Event{
+					Op: fsnotify.Write,
+				}
+				close(inputChan)
+
+				mockWatcher.EXPECT().Events().AnyTimes().Return(inputChan)
+
+				return mockWatcher, nil
+			},
+			fileOpener: func(name string) (file.FileHandle, error) {
+				mockFile := file.NewMockFileHandle(ctrl)
+				mockFile.EXPECT().Seek(gomock.Any(), io.SeekEnd).Return(int64(0), nil)
+
+				input := "One result\n"
+				r := bytes.NewBufferString(input)
+
+				mockFile.EXPECT().Read(gomock.Any()).AnyTimes().DoAndReturn(func(b []byte) (int, error) {
+					return r.Read(b)
+				})
+
+				mockFile.EXPECT().Close().AnyTimes()
+
+				return mockFile, nil
+			},
+		},
 	}
 
 	for _, c := range testCases {
-		t.Run(c.name, func(t *testing.T) {
-			file_path, write, cleanup := setupTempFile(t)
-			defer cleanup()
-
-			if c.filePath != "" {
-				file_path = c.filePath
-			}
-
-			logFileIngestion := file.NewLogFileIngestion(file_path, c.watcherFactory, c.fileOpener, idGen)
-
-			errChan := make(chan error, 1)
-			defer close(errChan)
-
-			output := make(chan domain.LogEvent, 1)
-			defer close(output)
-
-			ctx, closeContext := context.WithCancel(context.Background())
-			defer closeContext()
-
-			logFileIngestion.Read(ctx, output, errChan)
-			if c.shouldCancelContext {
-				closeContext()
-			}
-
-			iterations := 1
-			hasBody := c.fileBodyWrite != ""
-			if hasBody {
-				time.Sleep(100 * time.Millisecond)
-				write(c.fileBodyWrite)
-				lines := strings.Split(c.fileBodyWrite, "\n")
-				newLinesCount := 0
-
-				for _, line := range lines {
-					if line != "" {
-						newLinesCount++
-					}
-				}
-
-				if newLinesCount > 1 {
-					iterations = newLinesCount
-				}
-			}
-
-			readCount := 0
-
-			for i := 0; i < iterations; i++ {
-				select {
-				case <-output:
-					readCount++
-				case err := <-errChan:
-					assert.EqualError(t, err, c.expectError)
-				case <-time.After(500 * time.Millisecond):
-					if c.expectError != "" || hasBody {
-						t.Fatal("The result didn't arrive to the channel")
-					}
-				}
-			}
-
-			if hasBody && c.expectError == "" {
-				assert.Equal(t, iterations, readCount)
-			}
-		})
+		runTestLogFileIngestion(t, idGen, c)
 	}
+}
+
+func runTestLogFileIngestion(t *testing.T, idGen domain.IDGenerator, c testCase) {
+	t.Run(c.name, func(t *testing.T) {
+		file_path, write, cleanup := setupTempFile(t)
+		defer cleanup()
+
+		if c.filePath != "" {
+			file_path = c.filePath
+		}
+
+		logFileIngestion := file.NewLogFileIngestion(file_path, c.watcherFactory, c.fileOpener, idGen)
+
+		errChan := make(chan error, 1)
+		defer close(errChan)
+
+		output := make(chan domain.LogEvent, 1)
+		defer close(output)
+
+		ctx, closeContext := context.WithCancel(context.Background())
+		defer closeContext()
+
+		logFileIngestion.Read(ctx, output, errChan)
+		if c.shouldCancelContext {
+			closeContext()
+		}
+
+		iterations := 1
+		hasBody := c.fileBodyWrite != ""
+		if hasBody {
+			time.Sleep(100 * time.Millisecond)
+			write(c.fileBodyWrite)
+			lines := strings.Split(c.fileBodyWrite, "\n")
+			newLinesCount := 0
+
+			for _, line := range lines {
+				if line != "" {
+					newLinesCount++
+				}
+			}
+
+			if newLinesCount > 1 {
+				iterations = newLinesCount
+			}
+		}
+
+		readCount := 0
+
+		for i := 0; i < iterations; i++ {
+			select {
+			case <-output:
+				readCount++
+			case err := <-errChan:
+				assert.EqualError(t, err, c.expectError)
+			case <-time.After(500 * time.Millisecond):
+				if c.expectError != "" || hasBody {
+					t.Fatal("The result didn't arrive to the channel")
+				}
+			}
+		}
+
+		if hasBody && c.expectError == "" {
+			assert.Equal(t, iterations, readCount)
+		}
+	})
 }
 
 func TestWatcherFactoryWithError(t *testing.T) {

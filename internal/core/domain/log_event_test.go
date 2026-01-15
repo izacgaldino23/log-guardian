@@ -2,6 +2,7 @@ package domain_test
 
 import (
 	"encoding/json"
+	"errors"
 	"log-guardian/internal/core/domain"
 	"testing"
 	"time"
@@ -12,12 +13,16 @@ import (
 )
 
 func TestNewLogEvent(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
 	tests := []struct {
 		name     string
 		source   string
 		message  string
 		severity domain.LogLevel
-		metadata map[string]interface{}
+		metadata map[string]any
+		idGen    func() domain.IDGenerator
 		wantErr  bool
 	}{
 		{
@@ -44,17 +49,36 @@ func TestNewLogEvent(t *testing.T) {
 			metadata: map[string]interface{}{},
 			wantErr:  false,
 		},
-	}
+		{
+			name:     "log event error generating id",
+			source:   domain.SOURCE_UNIX,
+			message:  "Empty metadata test",
+			severity: domain.LOG_LEVEL_DEBUG,
+			metadata: map[string]interface{}{},
+			idGen:    func() domain.IDGenerator { 
+				mockGenerateID := domain.NewMockIDGenerator(ctrl)
+				mockGenerateID.EXPECT().Generate().AnyTimes().Return("", errors.New("error generating id"))
 
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
+				return mockGenerateID
+			},
+			wantErr:  true,
+		},
+	}
 
 	mockGenerateID := domain.NewMockIDGenerator(ctrl)
 	mockGenerateID.EXPECT().Generate().AnyTimes().Return("test-id", nil)
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			event, err := domain.NewLogEvent(tt.source, tt.message, tt.severity, tt.metadata, mockGenerateID)
+			mockGenerator := func () domain.IDGenerator {
+				if tt.idGen != nil {
+					return tt.idGen()
+				}
+
+				return mockGenerateID
+			}
+
+			event, err := domain.NewLogEvent(tt.source, tt.message, tt.severity, tt.metadata, mockGenerator())
 
 			if tt.wantErr {
 				assert.Error(t, err)
