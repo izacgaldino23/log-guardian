@@ -9,6 +9,8 @@ import (
 	"net"
 	"strings"
 	"time"
+
+	"golang.org/x/time/rate"
 )
 
 const (
@@ -22,6 +24,7 @@ type UnixIngestion struct {
 	socketPath        string
 	connectionFactory ConnectionFactory
 	timeout           time.Duration
+	rateLimiter *rate.Limiter
 }
 
 func NewUnixIngestion(socketPath string, connFactory ConnectionFactory, timeout time.Duration) *UnixIngestion {
@@ -29,6 +32,7 @@ func NewUnixIngestion(socketPath string, connFactory ConnectionFactory, timeout 
 		socketPath:        socketPath,
 		timeout:           timeout,
 		connectionFactory: connFactory,
+		rateLimiter: rate.NewLimiter(rate.Limit(1000), 100),
 	}
 }
 
@@ -79,6 +83,8 @@ func (u *UnixIngestion) Run(ctx context.Context, conn Conn, output chan<- domain
 			u.SendError(ctx, fmt.Errorf("message too large: %d bytes", len(line)), errChan)
 			return
 		}
+
+		u.rateLimiter.Wait(ctx)
 
 		u.Emit(ctx, line, output)
 	}

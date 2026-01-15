@@ -39,7 +39,9 @@ func TestUnixIngestion_Read(t *testing.T) {
 			name:       "ShouldFailInvalidSocketPath",
 			socketPath: ".",
 			mockConnectionFactory: func(_ net.Conn) unix.ConnectionFactory {
-				return unix.NewNetConnectionFactory(net.DialTimeout)
+				return func(network, path string, timeout time.Duration) (unix.Conn, error) {
+					return net.DialTimeout(network, path, timeout)
+				}
 			},
 			expectedError: "dial unix .: connect:",
 		},
@@ -118,10 +120,10 @@ func TestUnixIngestion_Read(t *testing.T) {
 			name:       "ShouldFailWhenGetErrorCreatingConnection",
 			socketPath: validSocketPath,
 			mockConnectionFactory: func(client net.Conn) unix.ConnectionFactory {
-				fakeNewNetConnection := func(_, _ string, _ time.Duration) (net.Conn, error) {
+				fakeNewNetConnection := func(_, _ string, _ time.Duration) (unix.Conn, error) {
 					return nil, errors.New("some-connection-creation-error")
 				}
-				return unix.NewNetConnectionFactory(fakeNewNetConnection)
+				return fakeNewNetConnection
 			},
 			expectedError: "some-connection-creation-error",
 		},
@@ -130,10 +132,10 @@ func TestUnixIngestion_Read(t *testing.T) {
 			socketPath: validSocketPath,
 			mockConnectionFactory: func(client net.Conn) unix.ConnectionFactory {
 				if client != nil {
-					fakeConnection := func(_, _ string, _ time.Duration) (net.Conn, error) {
+					fakeNewNetConnection := func(_, _ string, _ time.Duration) (unix.Conn, error) {
 						return client, nil
 					}
-					return unix.NewNetConnectionFactory(fakeConnection)
+					return fakeNewNetConnection
 				}
 
 				return nil
