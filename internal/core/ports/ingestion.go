@@ -5,6 +5,8 @@ import (
 	"log-guardian/internal/core/domain"
 )
 
+//go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
+
 type InputProvider interface {
 	Read(ctx context.Context, output chan<- domain.LogEvent, errChan chan<- error)
 }

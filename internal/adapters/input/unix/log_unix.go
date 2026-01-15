@@ -24,15 +24,17 @@ type UnixIngestion struct {
 	socketPath        string
 	connectionFactory ConnectionFactory
 	timeout           time.Duration
-	rateLimiter *rate.Limiter
+	rateLimiter       *rate.Limiter
+	idGen             domain.IDGenerator
 }
 
-func NewUnixIngestion(socketPath string, connFactory ConnectionFactory, timeout time.Duration) *UnixIngestion {
+func NewUnixIngestion(socketPath string, connFactory ConnectionFactory, timeout time.Duration, idGen domain.IDGenerator) *UnixIngestion {
 	return &UnixIngestion{
 		socketPath:        socketPath,
 		timeout:           timeout,
 		connectionFactory: connFactory,
-		rateLimiter: rate.NewLimiter(rate.Limit(1000), 100),
+		rateLimiter:       rate.NewLimiter(rate.Limit(1000), 100),
+		idGen:             idGen,
 	}
 }
 
@@ -98,15 +100,10 @@ func (u *UnixIngestion) SendError(ctx context.Context, err error, errChan chan<-
 }
 
 func (u *UnixIngestion) Emit(ctx context.Context, msg string, output chan<- domain.LogEvent) {
-	event := domain.LogEvent{
-		Timestamp: time.Now().Format(time.RFC3339),
-		Source:    domain.SOURCE_UNIX,
-		Severity:  "INFO",
-		Message:   msg,
-	}
+	event, _ := domain.NewLogEvent(domain.SOURCE_UNIX, msg, domain.LOG_LEVEL_INFO, nil, u.idGen)
 
 	select {
 	case <-ctx.Done():
-	case output <- event:
+	case output <- *event:
 	}
 }

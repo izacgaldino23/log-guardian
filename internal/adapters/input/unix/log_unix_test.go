@@ -34,6 +34,9 @@ func TestUnixIngestion_Read(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
+	idGen := domain.NewMockIDGenerator(ctrl)
+	idGen.EXPECT().Generate().AnyTimes().Return("some-id", nil)
+
 	testCases := []testCase{
 		{
 			name:       "ShouldFailInvalidSocketPath",
@@ -158,11 +161,11 @@ func TestUnixIngestion_Read(t *testing.T) {
 	}
 
 	for _, c := range testCases {
-		validateUnixReadTestCase(t, c)
+		validateUnixReadTestCase(t, c, idGen)
 	}
 }
 
-func validateUnixReadTestCase(t *testing.T, c testCase) {
+func validateUnixReadTestCase(t *testing.T, c testCase, idGen domain.IDGenerator) {
 	t.Run(c.name, func(t *testing.T) {
 		var (
 			server, client net.Conn
@@ -174,7 +177,7 @@ func validateUnixReadTestCase(t *testing.T, c testCase) {
 			defer client.Close()
 		}
 
-		unixIngest := unix.NewUnixIngestion(c.socketPath, c.mockConnectionFactory(client), time.Second*1)
+			unixIngest := unix.NewUnixIngestion(c.socketPath, c.mockConnectionFactory(client), time.Second*1, idGen)
 
 		done := make(chan struct{})
 		output := make(chan domain.LogEvent, 10)

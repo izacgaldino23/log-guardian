@@ -23,6 +23,9 @@ func TestLogFileIngestion(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
+	idGen := domain.NewMockIDGenerator(ctrl)
+	idGen.EXPECT().Generate().AnyTimes().Return("some-id", nil)
+
 	testCases := []struct {
 		name                string
 		filePath            string
@@ -223,7 +226,7 @@ func TestLogFileIngestion(t *testing.T) {
 				file_path = c.filePath
 			}
 
-			logFileIngestion := file.NewLogFileIngestion(file_path, c.watcherFactory, c.fileOpener)
+			logFileIngestion := file.NewLogFileIngestion(file_path, c.watcherFactory, c.fileOpener, idGen)
 
 			errChan := make(chan error, 1)
 			defer close(errChan)

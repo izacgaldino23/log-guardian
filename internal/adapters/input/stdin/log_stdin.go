@@ -5,15 +5,18 @@ import (
 	"context"
 	"io"
 	"log-guardian/internal/core/domain"
-	"time"
 )
 
 type StdinIngestion struct {
 	reader io.Reader
+	idGen  domain.IDGenerator
 }
 
-func NewStdinIngestion(reader io.Reader) *StdinIngestion {
-	return &StdinIngestion{reader: reader}
+func NewStdinIngestion(reader io.Reader, idGen domain.IDGenerator) *StdinIngestion {
+	return &StdinIngestion{
+		reader: reader,
+		idGen:  idGen,
+	}
 }
 
 // Read reads the input from stdin and sends the logs to the output channel
@@ -28,17 +31,12 @@ func (i *StdinIngestion) Read(ctx context.Context, output chan<- domain.LogEvent
 				continue
 			}
 
-			event := domain.LogEvent{
-				Timestamp: time.Now().Format(time.RFC3339),
-				Source:    domain.SOURCE_STDIN,
-				Severity:  "INFO",
-				Message:   line,
-			}
+			event, _ := domain.NewLogEvent(domain.SOURCE_STDIN, line, domain.LOG_LEVEL_INFO, nil, i.idGen)
 
 			select {
 			case <-ctx.Done():
 				return
-			case output <- event:
+			case output <- *event:
 			}
 		}
 

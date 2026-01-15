@@ -6,7 +6,6 @@ import (
 	"io"
 	"log-guardian/internal/core/domain"
 	"strings"
-	"time"
 
 	"github.com/fsnotify/fsnotify"
 )
@@ -17,13 +16,15 @@ type LogFileIngestion struct {
 	fileOpener     fileOpener
 	watcher        FileWatcher
 	file           FileHandle
+	idGen          domain.IDGenerator
 }
 
-func NewLogFileIngestion(filePath string, factory WatcherFactory, opener fileOpener) *LogFileIngestion {
+func NewLogFileIngestion(filePath string, factory WatcherFactory, opener fileOpener, idGen domain.IDGenerator) *LogFileIngestion {
 	return &LogFileIngestion{
 		filePath:       filePath,
 		watcherFactory: factory,
 		fileOpener:     opener,
+		idGen:          idGen,
 	}
 }
 
@@ -125,10 +126,6 @@ func (lf *LogFileIngestion) handleWrite(reader *bufio.Reader, output chan<- doma
 }
 
 func (lf *LogFileIngestion) emit(msg string, output chan<- domain.LogEvent) {
-	output <- domain.LogEvent{
-		Timestamp: time.Now().Format(time.RFC3339),
-		Source:    domain.SOURCE_FILE,
-		Severity:  "INFO",
-		Message:   msg,
-	}
+	event, _ := domain.NewLogEvent(domain.SOURCE_FILE, msg, domain.LOG_LEVEL_INFO, nil, lf.idGen)
+	output <- *event
 }
