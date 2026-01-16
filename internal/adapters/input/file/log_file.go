@@ -5,6 +5,7 @@ import (
 	"context"
 	"io"
 	"log-guardian/internal/core/domain"
+	"log-guardian/internal/core/ports"
 	"strings"
 
 	"github.com/fsnotify/fsnotify"
@@ -28,14 +29,18 @@ func NewLogFileIngestion(filePath string, fileWatcher FileWatcher, opener FileSy
 }
 
 // Read reads the file writes and sends the logs to the output channel
-func (lf *LogFileIngestion) Read(ctx context.Context, output chan<- domain.LogEvent, errChan chan<- error) {
+func (lf *LogFileIngestion) Read(ctx context.Context, output chan<- domain.LogEvent, errChan chan<- error, shutdownCallback ports.IngestionShutdown) {
 	err := lf.setup()
 	if err != nil {
 		errChan <- err
 		return
 	}
 
-	go lf.run(ctx, output, errChan)
+	go func () {
+		defer shutdownCallback.OnShutdown()
+		
+		lf.run(ctx, output, errChan)
+	}()
 }
 
 func (lf *LogFileIngestion) setup() error {

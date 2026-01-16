@@ -7,6 +7,7 @@ import (
 	"io"
 	"log-guardian/internal/adapters/input/file"
 	"log-guardian/internal/core/domain"
+	"log-guardian/internal/core/ports"
 	"os"
 	"path/filepath"
 	"strings"
@@ -291,7 +292,12 @@ func runTestLogFileIngestion(t *testing.T, idGen domain.IDGenerator, c testCase)
 		ctx, closeContext := context.WithCancel(context.Background())
 		defer closeContext()
 
-		logFileIngestion.Read(ctx, output, errChan)
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		shutdownMock := ports.NewMockIngestionShutdown(ctrl)
+		shutdownMock.EXPECT().OnShutdown().AnyTimes()
+
+		logFileIngestion.Read(ctx, output, errChan, shutdownMock)
 		if c.shouldCancelContext {
 			closeContext()
 		}

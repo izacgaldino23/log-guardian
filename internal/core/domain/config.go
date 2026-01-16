@@ -9,9 +9,14 @@ import (
 var config *RuntimeConfig
 
 type RuntimeConfig struct {
-	StdinConfig StdinConfig `yaml:"stdin"`
-	FileConfig  FileConfig  `yaml:"file"`
-	UnixConfig  UnixConfig  `yaml:"unix"`
+	ShutdownTimeout int     `yaml:"shutdown_timeout"`
+	Ingests         Ingests `yaml:"ingests"`
+}
+
+type Ingests struct {
+	Stdin StdinConfig `yaml:"stdin"`
+	File  FileConfig  `yaml:"file"`
+	Unix  UnixConfig  `yaml:"unix"`
 }
 
 type ingestionConfig struct {

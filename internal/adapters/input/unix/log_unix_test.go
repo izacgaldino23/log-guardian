@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log-guardian/internal/adapters/input/unix"
 	"log-guardian/internal/core/domain"
+	"log-guardian/internal/core/ports"
 	"net"
 	"strings"
 	"testing"
@@ -161,8 +162,13 @@ func validateUnixReadTestCase(t *testing.T, c testCase, idGen domain.IDGenerator
 		ctx, closeCtx := context.WithTimeout(context.Background(), 1*time.Second)
 		defer closeCtx()
 
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		shutdownMock := ports.NewMockIngestionShutdown(ctrl)
+		shutdownMock.EXPECT().OnShutdown().AnyTimes()
+
 		go func() {
-			unixIngest.Read(ctx, output, errChan)
+			unixIngest.Read(ctx, output, errChan, shutdownMock)
 			close(done)
 		}()
 

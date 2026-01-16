@@ -5,6 +5,7 @@ import (
 	"context"
 	"io"
 	"log-guardian/internal/core/domain"
+	"log-guardian/internal/core/ports"
 )
 
 type StdinIngestion struct {
@@ -20,10 +21,12 @@ func NewStdinIngestion(reader io.Reader, idGen domain.IDGenerator) *StdinIngesti
 }
 
 // Read reads the input from stdin and sends the logs to the output channel
-func (i *StdinIngestion) Read(ctx context.Context, output chan<- domain.LogEvent, errChan chan<- error) {
+func (i *StdinIngestion) Read(ctx context.Context, output chan<- domain.LogEvent, errChan chan<- error, shutdownCallback ports.IngestionShutdown) {
 	scanner := bufio.NewScanner(i.reader)
 
 	go func() {
+		defer shutdownCallback.OnShutdown()
+
 		for scanner.Scan() {
 			line := scanner.Text()
 

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log-guardian/internal/core/domain"
+	"log-guardian/internal/core/ports"
 	"net"
 	"strings"
 	"time"
@@ -33,12 +34,16 @@ func NewUnixIngestion(conn Conn, idGen domain.IDGenerator) *UnixIngestion {
 	}
 }
 
-func (u *UnixIngestion) Read(ctx context.Context, output chan<- domain.LogEvent, errChan chan<- error) {
+func (u *UnixIngestion) Read(ctx context.Context, output chan<- domain.LogEvent, errChan chan<- error, shutdownCallback ports.IngestionShutdown) {
 	go func() {
 		<-ctx.Done()
 	}()
 
-	go u.Run(ctx, output, errChan)
+	go func() {
+		defer shutdownCallback.OnShutdown()
+
+		u.Run(ctx, output, errChan)
+	}()
 }
 
 func (u *UnixIngestion) Run(ctx context.Context, output chan<- domain.LogEvent, errChan chan<- error) {
