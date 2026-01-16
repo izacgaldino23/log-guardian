@@ -19,16 +19,16 @@ type Ingests struct {
 	Unix  UnixConfig  `yaml:"unix"`
 }
 
-type ingestionConfig struct {
+type IngestionConfig struct {
 	Enabled bool `yaml:"enabled"`
 }
 
 type StdinConfig struct {
-	ingestionConfig
+	IngestionConfig
 }
 
 type FileConfig struct {
-	ingestionConfig
+	IngestionConfig
 
 	Folders []FolderConfig `yaml:"folders"`
 }
@@ -39,14 +39,14 @@ type FolderConfig struct {
 }
 
 type UnixConfig struct {
-	ingestionConfig
+	IngestionConfig
 
 	Sockets []UnixSocket `yaml:"sockets"`
 }
 
 type UnixSocket struct {
 	Address string `yaml:"address"`
-	Timeout int    `yaml:"timeout"`
+	Timeout int64  `yaml:"timeout"`
 }
 
 // LoadConfigs loads the configuration file

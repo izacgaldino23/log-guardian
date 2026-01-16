@@ -3,7 +3,7 @@ package application
 import (
 	"context"
 	"fmt"
-	"log"
+	"io"
 	"log-guardian/internal/adapters/infra"
 	"log-guardian/internal/adapters/input/file"
 	"log-guardian/internal/adapters/input/stdin"
@@ -24,6 +24,9 @@ type orchestrator struct {
 	ctx             context.Context
 	ctxCancel       context.CancelFunc
 	signal          chan os.Signal
+	Input           io.Reader
+	outputs         []domain.LogEvent
+	errors          []error
 }
 
 func NewOrchestrator(ctx context.Context, config *domain.RuntimeConfig, shutdownTimeout time.Duration) *orchestrator {
@@ -65,11 +68,11 @@ outer:
 	for {
 		select {
 		case event := <-outputChan:
-			fmt.Printf("Log received: [%s] %s\n", event.Severity, event.Message)
+			o.outputs = append(o.outputs, event)
 		case <-o.ctx.Done():
 			break outer
 		case err := <-errChan:
-			log.Printf("Error: %s\n", err.Error())
+			o.errors = append(o.errors, err)
 		case <-o.signal:
 			break outer
 		}
@@ -81,7 +84,12 @@ outer:
 }
 
 func (o *orchestrator) watchStdin(output chan<- domain.LogEvent, errChan chan<- error) {
-	stdinIngest := stdin.NewStdinIngestion(os.Stdin, o.idGen)
+	input := o.Input
+	if input == nil {
+		input = os.Stdin
+	}
+
+	stdinIngest := stdin.NewStdinIngestion(input, o.idGen)
 
 	o.wg.Add(1)
 	stdinIngest.Read(o.ctx, output, errChan, o)
@@ -115,7 +123,9 @@ func (o *orchestrator) watchUnix(output chan<- domain.LogEvent, errChan chan<- e
 	if len(o.config.Ingests.Unix.Sockets) > 0 {
 		// TODO: support for many connections
 		// running only on the first index
-		connection, err := unix.NewUnixConnectionProvider(o.config.Ingests.Unix.Sockets[0].Address, time.Duration(o.config.Ingests.Unix.Sockets[0].Timeout))
+		socket := o.config.Ingests.Unix.Sockets[0]
+		duration := time.Duration(socket.Timeout) * time.Millisecond
+		connection, err := unix.NewUnixConnectionProvider(socket.Address, duration)
 		if err != nil {
 			errChan <- err
 			return
@@ -135,4 +145,12 @@ func (o *orchestrator) Shutdown() {
 
 func (s *orchestrator) OnShutdown() {
 	s.wg.Done()
+}
+
+func (o *orchestrator) GetOutput() []domain.LogEvent {
+	return o.outputs
+}
+
+func (o *orchestrator) GetErrors() []error {
+	return o.errors
 }
