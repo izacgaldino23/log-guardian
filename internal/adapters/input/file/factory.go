@@ -1,11 +1,20 @@
 package file
 
-func NewRealWatcherFactory(newWatcher newFSNotifyWatcher) WatcherFactory {
-	return func() (FileWatcher, error) {
-		w, err := newWatcher()
-		if err != nil {
-			return nil, err
-		}
-		return &WatcherWrapper{Watcher: w}, nil
-	}
+import (
+	"os"
+
+	"github.com/fsnotify/fsnotify"
+)
+
+type WatcherProvider struct{}
+
+func (p *WatcherProvider) Create() (FileWatcher, error) {
+	w, err := fsnotify.NewWatcher()
+	return &WatcherWrapper{Watcher: w}, err
+}
+
+type OSFileSystem struct{}
+
+func (OSFileSystem) Open(name string) (FileHandle, error) {
+	return os.Open(name)
 }

@@ -18,46 +18,36 @@ const (
 )
 
 type UnixIngestion struct {
-	socketPath        string
-	connectionFactory ConnectionFactory
-	timeout           time.Duration
-	idGen             domain.IDGenerator
-	maxMessageSize    int
+	socketPath     string
+	connection     Conn
+	timeout        time.Duration
+	idGen          domain.IDGenerator
+	maxMessageSize int
 }
 
-func NewUnixIngestion(socketPath string, connFactory ConnectionFactory, timeout time.Duration, idGen domain.IDGenerator) *UnixIngestion {
-
+func NewUnixIngestion(conn Conn, idGen domain.IDGenerator) *UnixIngestion {
 	return &UnixIngestion{
-		socketPath:        socketPath,
-		timeout:           timeout,
-		connectionFactory: connFactory,
-		idGen:             idGen,
-		maxMessageSize:    1024 * 1024,
+		connection:     conn,
+		idGen:          idGen,
+		maxMessageSize: 1024 * 1024,
 	}
 }
 
 func (u *UnixIngestion) Read(ctx context.Context, output chan<- domain.LogEvent, errChan chan<- error) {
-	conn, err := u.connectionFactory("unix", u.socketPath, u.timeout)
-	if err != nil {
-		u.SendError(ctx, err, errChan)
-		return
-	}
-
 	go func() {
 		<-ctx.Done()
-		conn.Close()
 	}()
 
-	go u.Run(ctx, conn, output, errChan)
+	go u.Run(ctx, output, errChan)
 }
 
-func (u *UnixIngestion) Run(ctx context.Context, conn Conn, output chan<- domain.LogEvent, errChan chan<- error) {
-	defer conn.Close()
+func (u *UnixIngestion) Run(ctx context.Context, output chan<- domain.LogEvent, errChan chan<- error) {
+	defer u.connection.Close()
 
-	reader := bufio.NewReaderSize(conn, initialBufSize)
+	reader := bufio.NewReaderSize(u.connection, initialBufSize)
 
 	for {
-		err := conn.SetReadDeadline(time.Now().Add(readDeadline))
+		err := u.connection.SetReadDeadline(time.Now().Add(readDeadline))
 		if err != nil {
 			u.SendError(ctx, err, errChan)
 			return
