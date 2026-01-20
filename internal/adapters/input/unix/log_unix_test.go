@@ -26,7 +26,7 @@ type testCase struct {
 	input               string
 	shouldCancelContext bool
 	useNetPipe          bool
-	mockConnection      func(address string, timeout time.Duration) (unix.Conn, error)
+	mockConnection      func(address string, timeout time.Duration) unix.ConnectionProvider
 	expectedOutput      []domain.LogEvent
 }
 
@@ -43,19 +43,22 @@ func TestUnixIngestion_Read(t *testing.T) {
 		{
 			name:       "ShouldFailWhenSetReadDeadline",
 			socketPath: "/tmp/asdf.sock",
-			mockConnection: func(address string, timeout time.Duration) (unix.Conn, error) {
+			mockConnection: func(address string, timeout time.Duration) unix.ConnectionProvider {
 				mockConn := unix.NewMockConn(ctrl)
 				mockConn.EXPECT().SetReadDeadline(gomock.Any()).Return(errors.New("some-set-read-dead-line-error"))
 				mockConn.EXPECT().Close().AnyTimes()
 
-				return mockConn, nil
+				mockConnectionProvider := unix.NewMockConnectionProvider(ctrl)
+				mockConnectionProvider.EXPECT().DialTimeout(gomock.Any(), address, timeout).Return(mockConn, nil)
+
+				return mockConnectionProvider
 			},
 			expectedError: "some-set-read-dead-line-error",
 		},
 		{
 			name:       "ShouldFailWhenGetReadTimeoutError",
 			socketPath: "/tmp/asdf.sock",
-			mockConnection: func(address string, timeout time.Duration) (unix.Conn, error) {
+			mockConnection: func(address string, timeout time.Duration) unix.ConnectionProvider {
 				mockConn := unix.NewMockConn(ctrl)
 				mockConn.EXPECT().SetReadDeadline(gomock.Any()).AnyTimes()
 				mockConn.EXPECT().Close().AnyTimes()
@@ -70,7 +73,10 @@ func TestUnixIngestion_Read(t *testing.T) {
 				})
 				mockConn.EXPECT().Read(gomock.Any()).AnyTimes().Return(0, nil)
 
-				return mockConn, nil
+				mockConnectionProvider := unix.NewMockConnectionProvider(ctrl)
+				mockConnectionProvider.EXPECT().DialTimeout(gomock.Any(), address, timeout).Return(mockConn, nil)
+
+				return mockConnectionProvider
 			},
 			expectedOutput: []domain.LogEvent{
 				{
@@ -83,14 +89,17 @@ func TestUnixIngestion_Read(t *testing.T) {
 		{
 			name:       "ShouldFailWhenGetNonReadTimeoutError",
 			socketPath: "/tmp/asdf.sock",
-			mockConnection: func(address string, timeout time.Duration) (unix.Conn, error) {
+			mockConnection: func(address string, timeout time.Duration) unix.ConnectionProvider {
 				mockConn := unix.NewMockConn(ctrl)
 				mockConn.EXPECT().SetReadDeadline(gomock.Any()).AnyTimes()
 				mockConn.EXPECT().Close().AnyTimes()
 
 				mockConn.EXPECT().Read(gomock.Any()).AnyTimes().Return(0, errors.New("some-read-error"))
 
-				return mockConn, nil
+				mockConnectionProvider := unix.NewMockConnectionProvider(ctrl)
+				mockConnectionProvider.EXPECT().DialTimeout(gomock.Any(), address, timeout).Return(mockConn, nil)
+
+				return mockConnectionProvider
 			},
 			expectedError:       "some-read-error",
 			shouldCancelContext: true,
@@ -134,8 +143,14 @@ func validateUnixReadTestCase(t *testing.T, c testCase, idGen domain.IDGenerator
 			connectionProvider = c.mockConnection
 		)
 
-		localConnection := func(address string, timeout time.Duration) (unix.Conn, error) {
-			return client, nil
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		localConnection := func(address string, timeout time.Duration) unix.ConnectionProvider {
+			mockConnectionProvider := unix.NewMockConnectionProvider(ctrl)
+			mockConnectionProvider.EXPECT().DialTimeout(gomock.Any(), address, timeout).Return(client, nil)
+
+			return mockConnectionProvider
 		}
 
 		if c.useNetPipe {
@@ -146,14 +161,9 @@ func validateUnixReadTestCase(t *testing.T, c testCase, idGen domain.IDGenerator
 			connectionProvider = localConnection
 		}
 
-		conn, err := connectionProvider(c.socketPath, time.Second*1)
-		if err != nil {
-			t.Error(err)
-			return
-		}
-		defer conn.Close()
+		connProvider := connectionProvider(c.socketPath, time.Second*1)
 
-		unixIngest := unix.NewUnixIngestion(conn, idGen)
+		unixIngest := unix.NewUnixIngestion(connProvider, idGen, c.socketPath, time.Second*1)
 
 		done := make(chan struct{})
 		output := make(chan domain.LogEvent, 10)
@@ -162,8 +172,6 @@ func validateUnixReadTestCase(t *testing.T, c testCase, idGen domain.IDGenerator
 		ctx, closeCtx := context.WithTimeout(context.Background(), 1*time.Second)
 		defer closeCtx()
 
-		ctrl := gomock.NewController(t)
-		defer ctrl.Finish()
 		shutdownMock := ports.NewMockIngestionShutdown(ctrl)
 		shutdownMock.EXPECT().OnShutdown().AnyTimes()
 

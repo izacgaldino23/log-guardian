@@ -12,19 +12,19 @@ import (
 )
 
 type LogFileIngestion struct {
-	filePath       string
-	fileSystem     FileSystem
-	fileWatcher        FileWatcher
-	file           FileHandle
-	idGen          domain.IDGenerator
+	filePath    string
+	fileSystem  FileSystem
+	fileWatcher FileWatcher
+	file        FileHandle
+	idGen       domain.IDGenerator
 }
 
 func NewLogFileIngestion(filePath string, fileWatcher FileWatcher, opener FileSystem, idGen domain.IDGenerator) *LogFileIngestion {
 	return &LogFileIngestion{
-		filePath:       filePath,
+		filePath:    filePath,
 		fileWatcher: fileWatcher,
-		fileSystem:     opener,
-		idGen:          idGen,
+		fileSystem:  opener,
+		idGen:       idGen,
 	}
 }
 
@@ -36,9 +36,9 @@ func (lf *LogFileIngestion) Read(ctx context.Context, output chan<- domain.LogEv
 		return
 	}
 
-	go func () {
+	go func() {
 		defer shutdownCallback.OnShutdown()
-		
+
 		lf.run(ctx, output, errChan)
 	}()
 }

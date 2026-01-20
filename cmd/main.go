@@ -8,9 +8,12 @@ import (
 	"time"
 )
 
+var config *domain.RuntimeConfig
+
 func init() {
+	var err error
 	// load config
-	_, err := domain.LoadConfigs()
+	config, err = domain.LoadConfigs()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -20,6 +23,6 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	orchestrator := application.NewOrchestrator(ctx, domain.GetConfig(), 5*time.Second)
+	orchestrator := application.NewOrchestrator(ctx, config, 5*time.Second)
 	orchestrator.Execute()
 }

@@ -125,13 +125,10 @@ func (o *orchestrator) watchUnix(output chan<- domain.LogEvent, errChan chan<- e
 		// running only on the first index
 		socket := o.config.Ingests.Unix.Sockets[0]
 		duration := time.Duration(socket.Timeout) * time.Millisecond
-		connection, err := unix.NewUnixConnectionProvider(socket.Address, duration)
-		if err != nil {
-			errChan <- err
-			return
-		}
 
-		unixIngest = unix.NewUnixIngestion(connection, o.idGen)
+		connectionProvider := unix.NewUnixConnectionProvider()
+
+		unixIngest = unix.NewUnixIngestion(connectionProvider, o.idGen, socket.Address, duration)
 
 		o.wg.Add(1)
 		unixIngest.Read(o.ctx, output, errChan, o)

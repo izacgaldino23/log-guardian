@@ -18,4 +18,4 @@ lint: format
 format:
 	go fmt ./...
 
-check-all: lint test-coverage
+check-all: lint test-coverage test-integration

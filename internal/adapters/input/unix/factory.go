@@ -5,8 +5,12 @@ import (
 	"time"
 )
 
-type connectionProvider struct {}
+type connectionProvider struct{}
 
-func NewUnixConnectionProvider(address string, timeout time.Duration) (Conn, error) {
-	return net.DialTimeout("unix", address, timeout)
+func (c connectionProvider) DialTimeout(network, address string, timeout time.Duration) (Conn, error) {
+	return net.DialTimeout(network, address, timeout)
+}
+
+func NewUnixConnectionProvider() ConnectionProvider {
+	return connectionProvider{}
 }

@@ -19,18 +19,20 @@ const (
 )
 
 type UnixIngestion struct {
-	socketPath     string
-	connection     Conn
-	timeout        time.Duration
-	idGen          domain.IDGenerator
-	maxMessageSize int
+	socketPath         string
+	timeout            time.Duration
+	connectionProvider ConnectionProvider
+	idGen              domain.IDGenerator
+	maxMessageSize     int
 }
 
-func NewUnixIngestion(conn Conn, idGen domain.IDGenerator) *UnixIngestion {
+func NewUnixIngestion(connectionProvider ConnectionProvider, idGen domain.IDGenerator, socketPath string, timeout time.Duration) *UnixIngestion {
 	return &UnixIngestion{
-		connection:     conn,
-		idGen:          idGen,
-		maxMessageSize: 1024 * 1024,
+		connectionProvider: connectionProvider,
+		idGen:              idGen,
+		maxMessageSize:     1024 * 1024,
+		socketPath:         socketPath,
+		timeout:            timeout,
 	}
 }
 
@@ -47,12 +49,17 @@ func (u *UnixIngestion) Read(ctx context.Context, output chan<- domain.LogEvent,
 }
 
 func (u *UnixIngestion) Run(ctx context.Context, output chan<- domain.LogEvent, errChan chan<- error) {
-	defer u.connection.Close()
+	connection, err := u.connectionProvider.DialTimeout("unix", u.socketPath, u.timeout)
+	if err != nil {
+		u.SendError(ctx, err, errChan)
+		return
+	}
+	defer connection.Close()
 
-	reader := bufio.NewReaderSize(u.connection, initialBufSize)
+	reader := bufio.NewReaderSize(connection, initialBufSize)
 
 	for {
-		err := u.connection.SetReadDeadline(time.Now().Add(readDeadline))
+		err := connection.SetReadDeadline(time.Now().Add(readDeadline))
 		if err != nil {
 			u.SendError(ctx, err, errChan)
 			return
