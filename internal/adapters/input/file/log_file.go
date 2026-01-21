@@ -5,51 +5,50 @@ import (
 	"context"
 	"io"
 	"log-guardian/internal/core/domain"
+	"log-guardian/internal/core/ports"
 	"strings"
 
 	"github.com/fsnotify/fsnotify"
 )
 
 type LogFileIngestion struct {
-	filePath       string
-	watcherFactory WatcherFactory
-	fileOpener     fileOpener
-	watcher        FileWatcher
-	file           FileHandle
-	idGen          domain.IDGenerator
+	filePath    string
+	fileSystem  FileSystem
+	fileWatcher FileWatcher
+	file        FileHandle
+	idGen       domain.IDGenerator
 }
 
-func NewLogFileIngestion(filePath string, factory WatcherFactory, opener fileOpener, idGen domain.IDGenerator) *LogFileIngestion {
+func NewLogFileIngestion(filePath string, fileWatcher FileWatcher, opener FileSystem, idGen domain.IDGenerator) *LogFileIngestion {
 	return &LogFileIngestion{
-		filePath:       filePath,
-		watcherFactory: factory,
-		fileOpener:     opener,
-		idGen:          idGen,
+		filePath:    filePath,
+		fileWatcher: fileWatcher,
+		fileSystem:  opener,
+		idGen:       idGen,
 	}
 }
 
 // Read reads the file writes and sends the logs to the output channel
-func (lf *LogFileIngestion) Read(ctx context.Context, output chan<- domain.LogEvent, errChan chan<- error) {
+func (lf *LogFileIngestion) Read(ctx context.Context, output chan<- domain.LogEvent, errChan chan<- error, shutdownCallback ports.IngestionShutdown) {
 	err := lf.setup()
 	if err != nil {
 		errChan <- err
 		return
 	}
 
-	go lf.run(ctx, output, errChan)
+	go func() {
+		defer shutdownCallback.OnShutdown()
+
+		lf.run(ctx, output, errChan)
+	}()
 }
 
 func (lf *LogFileIngestion) setup() error {
 	var err error
 
-	lf.watcher, err = lf.watcherFactory()
+	lf.file, err = lf.fileSystem.Open(lf.filePath)
 	if err != nil {
-		return err
-	}
-
-	lf.file, err = lf.fileOpener(lf.filePath)
-	if err != nil {
-		lf.watcher.Close()
+		lf.fileWatcher.Close()
 
 		return err
 	}
@@ -57,7 +56,7 @@ func (lf *LogFileIngestion) setup() error {
 	_, err = lf.file.Seek(0, io.SeekEnd)
 	if err != nil {
 		lf.file.Close()
-		lf.watcher.Close()
+		lf.fileWatcher.Close()
 
 		return err
 	}
@@ -66,11 +65,11 @@ func (lf *LogFileIngestion) setup() error {
 }
 
 func (lf *LogFileIngestion) run(ctx context.Context, output chan<- domain.LogEvent, errChan chan<- error) {
-	defer lf.watcher.Close()
+	defer lf.fileWatcher.Close()
 	defer lf.file.Close()
 
 	// Add the file to the watcher
-	err := lf.watcher.Add(lf.filePath)
+	err := lf.fileWatcher.Add(lf.filePath)
 	if err != nil {
 		errChan <- err
 		return
@@ -82,7 +81,7 @@ func (lf *LogFileIngestion) run(ctx context.Context, output chan<- domain.LogEve
 		select {
 		case <-ctx.Done():
 			return
-		case event, ok := <-lf.watcher.Events():
+		case event, ok := <-lf.fileWatcher.Events():
 			if !ok {
 				return
 			}
@@ -91,7 +90,7 @@ func (lf *LogFileIngestion) run(ctx context.Context, output chan<- domain.LogEve
 			if event.Has(fsnotify.Write) {
 				lf.handleWrite(reader, output, errChan)
 			}
-		case err := <-lf.watcher.Errors():
+		case err := <-lf.fileWatcher.Errors():
 			if err == nil {
 				continue
 			}

@@ -7,6 +7,7 @@ import (
 	"io"
 	"log-guardian/internal/adapters/input/file"
 	"log-guardian/internal/core/domain"
+	"log-guardian/internal/core/ports"
 	"os"
 	"path/filepath"
 	"strings"
@@ -24,8 +25,8 @@ type testCase struct {
 	expectError         string
 	fileBodyWrite       string
 	shouldCancelContext bool
-	watcherFactory      func() (file.FileWatcher, error)
-	fileOpener          func(name string) (file.FileHandle, error)
+	watcherProvider     func() (file.FileWatcher, error)
+	fileSystem          func() file.FileSystem
 }
 
 func TestLogFileIngestion(t *testing.T) {
@@ -37,65 +38,74 @@ func TestLogFileIngestion(t *testing.T) {
 	idGen := domain.NewMockIDGenerator(ctrl)
 	idGen.EXPECT().Generate().AnyTimes().Return("some-id", nil)
 
+	var (
+		fileSystem      = file.OSFileSystem{}
+		watcherProvider = file.WatcherProvider{}
+	)
+
+	fileOpener := func() file.FileSystem {
+		return fileSystem
+	}
+
 	testCases := []testCase{
 		{
-			name: "ShouldFailBecauseWatcherInitializationFails",
-			watcherFactory: func() (file.FileWatcher, error) {
-				return file.NewMockFileWatcher(ctrl), errors.New("error-creating-watcher")
-			},
-			fileOpener: func(name string) (file.FileHandle, error) {
-				return nil, nil
-			},
-			expectError: "error-creating-watcher",
-		},
-		{
 			name: "ShouldFailBecauseFileOpeningFails",
-			watcherFactory: func() (file.FileWatcher, error) {
+			watcherProvider: func() (file.FileWatcher, error) {
 				mock := file.NewMockFileWatcher(ctrl)
 				mock.EXPECT().Close().AnyTimes()
 				return mock, nil
 			},
-			fileOpener: func(name string) (file.FileHandle, error) {
-				return nil, errors.New("some-open-file-error")
+			fileSystem: func() file.FileSystem {
+				fileSystemMock := file.NewMockFileSystem(ctrl)
+				fileSystemMock.EXPECT().Open(gomock.Any()).Return(nil, errors.New("some-open-file-error"))
+				return fileSystemMock
 			},
 			expectError: "some-open-file-error",
 		},
 		{
 			name: "ShouldFailBecauseFileSeekFails",
-			watcherFactory: func() (file.FileWatcher, error) {
+			watcherProvider: func() (file.FileWatcher, error) {
 				mock := file.NewMockFileWatcher(ctrl)
 				mock.EXPECT().Close().AnyTimes()
 				return mock, nil
 			},
-			fileOpener: func(name string) (file.FileHandle, error) {
+			fileSystem: func() file.FileSystem {
 				mockFile := file.NewMockFileHandle(ctrl)
 				mockFile.EXPECT().Seek(gomock.Any(), io.SeekEnd).Return(int64(0), errors.New("some-seek-error"))
 				mockFile.EXPECT().Close().Return(nil)
-				return mockFile, nil
+
+				fileSystemMock := file.NewMockFileSystem(ctrl)
+				fileSystemMock.EXPECT().Open(gomock.Any()).Return(mockFile, nil)
+
+				return fileSystemMock
 			},
 			expectError: "some-seek-error",
 		},
 		{
 			name: "ShouldFailBecauseFileWatcherAddFails",
-			watcherFactory: func() (file.FileWatcher, error) {
+			watcherProvider: func() (file.FileWatcher, error) {
 				mockWatcher := file.NewMockFileWatcher(ctrl)
 				mockWatcher.EXPECT().Close().AnyTimes()
 				mockWatcher.EXPECT().Add("file_path").Return(errors.New("some-watcher-add-error"))
 
 				return mockWatcher, nil
 			},
-			fileOpener: func(name string) (file.FileHandle, error) {
+			fileSystem: func() file.FileSystem {
 				mockFile := file.NewMockFileHandle(ctrl)
 				mockFile.EXPECT().Seek(gomock.Any(), io.SeekEnd).Return(int64(0), nil)
 				mockFile.EXPECT().Close().AnyTimes()
-				return mockFile, nil
+
+				fileSystemMock := file.NewMockFileSystem(ctrl)
+				fileSystemMock.EXPECT().Open(gomock.Any()).Return(mockFile, nil)
+
+				return fileSystemMock
 			},
 			filePath:    "file_path",
 			expectError: "some-watcher-add-error",
 		},
 		{
 			name: "ShouldEndBecauseContextIsCanceled",
-			watcherFactory: func() (file.FileWatcher, error) {
+			watcherProvider: func() (file.FileWatcher, error) {
 				mockWatcher := file.NewMockFileWatcher(ctrl)
 				mockWatcher.EXPECT().Close().AnyTimes()
 				mockWatcher.EXPECT().Add(gomock.Any()).AnyTimes()
@@ -104,14 +114,12 @@ func TestLogFileIngestion(t *testing.T) {
 
 				return mockWatcher, nil
 			},
-			fileOpener: func(name string) (file.FileHandle, error) {
-				return os.Open(name)
-			},
+			fileSystem:          fileOpener,
 			shouldCancelContext: true,
 		},
 		{
 			name: "ShouldSkipBecauseEventIsEmpty",
-			watcherFactory: func() (file.FileWatcher, error) {
+			watcherProvider: func() (file.FileWatcher, error) {
 				mockWatcher := file.NewMockFileWatcher(ctrl)
 				mockWatcher.EXPECT().Close().AnyTimes()
 				mockWatcher.EXPECT().Add(gomock.Any()).AnyTimes()
@@ -123,13 +131,11 @@ func TestLogFileIngestion(t *testing.T) {
 
 				return mockWatcher, nil
 			},
-			fileOpener: func(name string) (file.FileHandle, error) {
-				return os.Open(name)
-			},
+			fileSystem: fileOpener,
 		},
 		{
 			name: "ShouldSkipBecauseEventIsNotWriteKind",
-			watcherFactory: func() (file.FileWatcher, error) {
+			watcherProvider: func() (file.FileWatcher, error) {
 				mockWatcher := file.NewMockFileWatcher(ctrl)
 				mockWatcher.EXPECT().Close().AnyTimes()
 				mockWatcher.EXPECT().Add(gomock.Any()).AnyTimes()
@@ -143,21 +149,17 @@ func TestLogFileIngestion(t *testing.T) {
 
 				return mockWatcher, nil
 			},
-			fileOpener: func(name string) (file.FileHandle, error) {
-				return os.Open(name)
-			},
+			fileSystem: fileOpener,
 		},
 		{
-			name:           "ShouldBreakTheLoopBecauseGotTheEOFError",
-			watcherFactory: file.NewRealWatcherFactory(fsnotify.NewWatcher),
-			fileOpener: func(name string) (file.FileHandle, error) {
-				return os.Open(name)
-			},
-			fileBodyWrite: "hello\nworld",
+			name:            "ShouldBreakTheLoopBecauseGotTheEOFError",
+			watcherProvider: watcherProvider.Create,
+			fileSystem:      fileOpener,
+			fileBodyWrite:   "hello\nworld",
 		},
 		{
 			name: "ShouldFailBecauseReadStringFails",
-			watcherFactory: func() (file.FileWatcher, error) {
+			watcherProvider: func() (file.FileWatcher, error) {
 				mockWatcher := file.NewMockFileWatcher(ctrl)
 				mockWatcher.EXPECT().Close().AnyTimes()
 				mockWatcher.EXPECT().Add(gomock.Any()).AnyTimes()
@@ -171,35 +173,34 @@ func TestLogFileIngestion(t *testing.T) {
 
 				return mockWatcher, nil
 			},
-			fileOpener: func(name string) (file.FileHandle, error) {
+			fileSystem: func() file.FileSystem {
 				mockFile := file.NewMockFileHandle(ctrl)
 				mockFile.EXPECT().Seek(gomock.Any(), io.SeekEnd).Return(int64(0), nil)
 				mockFile.EXPECT().Read(gomock.Any()).Return(0, errors.New("some-read-error"))
 				mockFile.EXPECT().Close().AnyTimes()
 
-				return mockFile, nil
+				fileSystemMock := file.NewMockFileSystem(ctrl)
+				fileSystemMock.EXPECT().Open(gomock.Any()).Return(mockFile, nil)
+
+				return fileSystemMock
 			},
 			expectError: "some-read-error",
 		},
 		{
-			name:           "ShouldContinueTheLoopIfTheLineStringIsEmpty",
-			watcherFactory: file.NewRealWatcherFactory(fsnotify.NewWatcher),
-			fileOpener: func(name string) (file.FileHandle, error) {
-				return os.Open(name)
-			},
-			fileBodyWrite: "hello\nworld\n\n",
+			name:            "ShouldContinueTheLoopIfTheLineStringIsEmpty",
+			watcherProvider: watcherProvider.Create,
+			fileSystem:      fileOpener,
+			fileBodyWrite:   "hello\nworld\n\n",
 		},
 		{
-			name:           "ShouldOutputTheEventLogWithSuccess",
-			watcherFactory: file.NewRealWatcherFactory(fsnotify.NewWatcher),
-			fileOpener: func(name string) (file.FileHandle, error) {
-				return os.Open(name)
-			},
-			fileBodyWrite: "hello\nworld\nfinal",
+			name:            "ShouldOutputTheEventLogWithSuccess",
+			watcherProvider: watcherProvider.Create,
+			fileSystem:      fileOpener,
+			fileBodyWrite:   "hello\nworld\nfinal",
 		},
 		{
 			name: "ShouldFailBecauseWatcherErrorsChannelReturnsError",
-			watcherFactory: func() (file.FileWatcher, error) {
+			watcherProvider: func() (file.FileWatcher, error) {
 				mockWatcher := file.NewMockFileWatcher(ctrl)
 				mockWatcher.EXPECT().Close().AnyTimes()
 				mockWatcher.EXPECT().Add(gomock.Any()).AnyTimes()
@@ -212,14 +213,12 @@ func TestLogFileIngestion(t *testing.T) {
 
 				return mockWatcher, nil
 			},
-			fileOpener: func(name string) (file.FileHandle, error) {
-				return os.Open(name)
-			},
+			fileSystem:  fileOpener,
 			expectError: "some-watch-error",
 		},
 		{
 			name: "ShouldFailBecauseWatcherErrorsChannelReturnsNilError",
-			watcherFactory: func() (file.FileWatcher, error) {
+			watcherProvider: func() (file.FileWatcher, error) {
 				mockWatcher := file.NewMockFileWatcher(ctrl)
 				mockWatcher.EXPECT().Close().AnyTimes()
 				mockWatcher.EXPECT().Add(gomock.Any()).AnyTimes()
@@ -240,7 +239,7 @@ func TestLogFileIngestion(t *testing.T) {
 
 				return mockWatcher, nil
 			},
-			fileOpener: func(name string) (file.FileHandle, error) {
+			fileSystem: func() file.FileSystem {
 				mockFile := file.NewMockFileHandle(ctrl)
 				mockFile.EXPECT().Seek(gomock.Any(), io.SeekEnd).Return(int64(0), nil)
 
@@ -253,7 +252,10 @@ func TestLogFileIngestion(t *testing.T) {
 
 				mockFile.EXPECT().Close().AnyTimes()
 
-				return mockFile, nil
+				fileSystemMock := file.NewMockFileSystem(ctrl)
+				fileSystemMock.EXPECT().Open(gomock.Any()).Return(mockFile, nil)
+
+				return fileSystemMock
 			},
 		},
 	}
@@ -272,7 +274,14 @@ func runTestLogFileIngestion(t *testing.T, idGen domain.IDGenerator, c testCase)
 			file_path = c.filePath
 		}
 
-		logFileIngestion := file.NewLogFileIngestion(file_path, c.watcherFactory, c.fileOpener, idGen)
+		provider, err := c.watcherProvider()
+		if err != nil {
+			t.Errorf("Expected no error, got %v", err)
+			return
+		}
+		defer provider.Close()
+
+		logFileIngestion := file.NewLogFileIngestion(file_path, provider, c.fileSystem(), idGen)
 
 		errChan := make(chan error, 1)
 		defer close(errChan)
@@ -283,7 +292,12 @@ func runTestLogFileIngestion(t *testing.T, idGen domain.IDGenerator, c testCase)
 		ctx, closeContext := context.WithCancel(context.Background())
 		defer closeContext()
 
-		logFileIngestion.Read(ctx, output, errChan)
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		shutdownMock := ports.NewMockIngestionShutdown(ctrl)
+		shutdownMock.EXPECT().OnShutdown().AnyTimes()
+
+		logFileIngestion.Read(ctx, output, errChan, shutdownMock)
 		if c.shouldCancelContext {
 			closeContext()
 		}
@@ -326,15 +340,6 @@ func runTestLogFileIngestion(t *testing.T, idGen domain.IDGenerator, c testCase)
 			assert.Equal(t, iterations, readCount)
 		}
 	})
-}
-
-func TestWatcherFactoryWithError(t *testing.T) {
-	newFsFake := func() (*fsnotify.Watcher, error) { return nil, errors.New("some-fake-error") }
-
-	watcherFactory := file.NewRealWatcherFactory(newFsFake)
-
-	_, err := watcherFactory()
-	assert.EqualError(t, err, "some-fake-error")
 }
 
 // setupTempFile creates a temporary file and returns its path.

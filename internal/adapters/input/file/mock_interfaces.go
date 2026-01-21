@@ -16,6 +16,113 @@ import (
 	gomock "go.uber.org/mock/gomock"
 )
 
+// MockFileHandle is a mock of FileHandle interface.
+type MockFileHandle struct {
+	ctrl     *gomock.Controller
+	recorder *MockFileHandleMockRecorder
+	isgomock struct{}
+}
+
+// MockFileHandleMockRecorder is the mock recorder for MockFileHandle.
+type MockFileHandleMockRecorder struct {
+	mock *MockFileHandle
+}
+
+// NewMockFileHandle creates a new mock instance.
+func NewMockFileHandle(ctrl *gomock.Controller) *MockFileHandle {
+	mock := &MockFileHandle{ctrl: ctrl}
+	mock.recorder = &MockFileHandleMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockFileHandle) EXPECT() *MockFileHandleMockRecorder {
+	return m.recorder
+}
+
+// Close mocks base method.
+func (m *MockFileHandle) Close() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Close")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Close indicates an expected call of Close.
+func (mr *MockFileHandleMockRecorder) Close() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockFileHandle)(nil).Close))
+}
+
+// Read mocks base method.
+func (m *MockFileHandle) Read(p []byte) (int, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Read", p)
+	ret0, _ := ret[0].(int)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Read indicates an expected call of Read.
+func (mr *MockFileHandleMockRecorder) Read(p any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Read", reflect.TypeOf((*MockFileHandle)(nil).Read), p)
+}
+
+// Seek mocks base method.
+func (m *MockFileHandle) Seek(offset int64, whence int) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Seek", offset, whence)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Seek indicates an expected call of Seek.
+func (mr *MockFileHandleMockRecorder) Seek(offset, whence any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Seek", reflect.TypeOf((*MockFileHandle)(nil).Seek), offset, whence)
+}
+
+// MockFileSystem is a mock of FileSystem interface.
+type MockFileSystem struct {
+	ctrl     *gomock.Controller
+	recorder *MockFileSystemMockRecorder
+	isgomock struct{}
+}
+
+// MockFileSystemMockRecorder is the mock recorder for MockFileSystem.
+type MockFileSystemMockRecorder struct {
+	mock *MockFileSystem
+}
+
+// NewMockFileSystem creates a new mock instance.
+func NewMockFileSystem(ctrl *gomock.Controller) *MockFileSystem {
+	mock := &MockFileSystem{ctrl: ctrl}
+	mock.recorder = &MockFileSystemMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockFileSystem) EXPECT() *MockFileSystemMockRecorder {
+	return m.recorder
+}
+
+// Open mocks base method.
+func (m *MockFileSystem) Open(name string) (FileHandle, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Open", name)
+	ret0, _ := ret[0].(FileHandle)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Open indicates an expected call of Open.
+func (mr *MockFileSystemMockRecorder) Open(name any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Open", reflect.TypeOf((*MockFileSystem)(nil).Open), name)
+}
+
 // MockFileWatcher is a mock of FileWatcher interface.
 type MockFileWatcher struct {
 	ctrl     *gomock.Controller
@@ -94,72 +201,4 @@ func (m *MockFileWatcher) Events() <-chan fsnotify.Event {
 func (mr *MockFileWatcherMockRecorder) Events() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Events", reflect.TypeOf((*MockFileWatcher)(nil).Events))
-}
-
-// MockFileHandle is a mock of FileHandle interface.
-type MockFileHandle struct {
-	ctrl     *gomock.Controller
-	recorder *MockFileHandleMockRecorder
-	isgomock struct{}
-}
-
-// MockFileHandleMockRecorder is the mock recorder for MockFileHandle.
-type MockFileHandleMockRecorder struct {
-	mock *MockFileHandle
-}
-
-// NewMockFileHandle creates a new mock instance.
-func NewMockFileHandle(ctrl *gomock.Controller) *MockFileHandle {
-	mock := &MockFileHandle{ctrl: ctrl}
-	mock.recorder = &MockFileHandleMockRecorder{mock}
-	return mock
-}
-
-// EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockFileHandle) EXPECT() *MockFileHandleMockRecorder {
-	return m.recorder
-}
-
-// Close mocks base method.
-func (m *MockFileHandle) Close() error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Close")
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// Close indicates an expected call of Close.
-func (mr *MockFileHandleMockRecorder) Close() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockFileHandle)(nil).Close))
-}
-
-// Read mocks base method.
-func (m *MockFileHandle) Read(p []byte) (int, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Read", p)
-	ret0, _ := ret[0].(int)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// Read indicates an expected call of Read.
-func (mr *MockFileHandleMockRecorder) Read(p any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Read", reflect.TypeOf((*MockFileHandle)(nil).Read), p)
-}
-
-// Seek mocks base method.
-func (m *MockFileHandle) Seek(offset int64, whence int) (int64, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Seek", offset, whence)
-	ret0, _ := ret[0].(int64)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// Seek indicates an expected call of Seek.
-func (mr *MockFileHandleMockRecorder) Seek(offset, whence any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Seek", reflect.TypeOf((*MockFileHandle)(nil).Seek), offset, whence)
 }
