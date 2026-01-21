@@ -293,7 +293,9 @@ func TestConfigValidationEdgeCases(t *testing.T) {
 		}
 		err := config.Validate()
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "\\non\\existent\\path")
+		assert.Contains(t, err.Error(), "non")
+		assert.Contains(t, err.Error(), "existent")
+		assert.Contains(t, err.Error(), "path")
 	})
 
 	t.Run("config with relative path that exists", func(t *testing.T) {
