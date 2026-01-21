@@ -28,16 +28,12 @@ type Ingests struct {
 	Unix  UnixConfig  `yaml:"unix"`
 }
 
-type IngestionConfig struct {
+type StdinConfig struct {
 	Enabled bool `yaml:"enabled"`
 }
 
-type StdinConfig struct {
-	IngestionConfig
-}
-
 type FileConfig struct {
-	IngestionConfig
+	Enabled bool `yaml:"enabled"`
 
 	Folders []FolderConfig `yaml:"folders"`
 }
@@ -48,7 +44,7 @@ type FolderConfig struct {
 }
 
 type UnixConfig struct {
-	IngestionConfig
+	Enabled bool `yaml:"enabled"`
 
 	Sockets []UnixSocket `yaml:"sockets"`
 }

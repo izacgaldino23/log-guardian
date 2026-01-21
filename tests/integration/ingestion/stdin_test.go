@@ -57,7 +57,7 @@ func TestStdinIngestion(t *testing.T) {
 			config := &domain.RuntimeConfig{
 				Ingests: domain.Ingests{
 					Stdin: domain.StdinConfig{
-						IngestionConfig: domain.IngestionConfig{Enabled: tt.enabled},
+						Enabled: tt.enabled,
 					},
 				},
 			}

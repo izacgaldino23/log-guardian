@@ -72,7 +72,7 @@ func TestFileIngestion(t *testing.T) {
 			config := &domain.RuntimeConfig{
 				Ingests: domain.Ingests{
 					File: domain.FileConfig{
-						IngestionConfig: domain.IngestionConfig{Enabled: tt.enabled},
+						Enabled: tt.enabled,
 						Folders: []domain.FolderConfig{
 							{FolderPath: fileName},
 						},
@@ -113,7 +113,7 @@ func TestFileIngestion_Error(t *testing.T) {
 	config := &domain.RuntimeConfig{
 		Ingests: domain.Ingests{
 			File: domain.FileConfig{
-				IngestionConfig: domain.IngestionConfig{Enabled: true},
+				Enabled: true,
 				Folders: []domain.FolderConfig{
 					{FolderPath: fileName},
 				},

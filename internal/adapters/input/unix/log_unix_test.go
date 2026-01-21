@@ -44,6 +44,17 @@ func TestUnixIngestion_Read(t *testing.T) {
 			name:       "ShouldFailWhenSetReadDeadline",
 			socketPath: "/tmp/asdf.sock",
 			mockConnection: func(address string, timeout time.Duration) unix.ConnectionProvider {
+				mockConnectionProvider := unix.NewMockConnectionProvider(ctrl)
+				mockConnectionProvider.EXPECT().DialTimeout(gomock.Any(), address, timeout).Return(nil, errors.New("some-dial-timeout-error"))
+
+				return mockConnectionProvider
+			},
+			expectedError: "some-dial-timeout-error",
+		},
+		{
+			name:       "ShouldFailWhenSetReadDeadline",
+			socketPath: "/tmp/asdf.sock",
+			mockConnection: func(address string, timeout time.Duration) unix.ConnectionProvider {
 				mockConn := unix.NewMockConn(ctrl)
 				mockConn.EXPECT().SetReadDeadline(gomock.Any()).Return(errors.New("some-set-read-dead-line-error"))
 				mockConn.EXPECT().Close().AnyTimes()

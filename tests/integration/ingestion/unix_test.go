@@ -81,7 +81,7 @@ func TestUnixSocketIngestion(t *testing.T) {
 			config := &domain.RuntimeConfig{
 				Ingests: domain.Ingests{
 					Unix: domain.UnixConfig{
-						IngestionConfig: domain.IngestionConfig{Enabled: tt.enabled},
+						Enabled: tt.enabled,
 						Sockets: []domain.UnixSocket{
 							{
 								Address: socketPath,
