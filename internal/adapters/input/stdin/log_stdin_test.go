@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log-guardian/internal/adapters/input/stdin"
 	"log-guardian/internal/core/domain"
+	"log-guardian/internal/core/ports"
 	"strings"
 	"testing"
 	"time"
@@ -37,7 +38,11 @@ func TestStdinIngestion(t *testing.T) {
 
 		output := make(chan domain.LogEvent)
 		errChan := make(chan error)
-		stdin.Read(ctx, output, errChan)
+
+		shutdownMock := ports.NewMockIngestionShutdown(ctrl)
+		shutdownMock.EXPECT().OnShutdown().AnyTimes()
+
+		stdin.Read(ctx, output, errChan, shutdownMock)
 
 		outputCount := 0
 
@@ -65,7 +70,10 @@ func TestStdinIngestion(t *testing.T) {
 		output := make(chan domain.LogEvent)
 
 		errChan := make(chan error)
-		stdin.Read(ctx, output, errChan)
+		shutdownMock := ports.NewMockIngestionShutdown(ctrl)
+		shutdownMock.EXPECT().OnShutdown().AnyTimes()
+
+		stdin.Read(ctx, output, errChan, shutdownMock)
 
 		<-output
 		cancel()
@@ -95,7 +103,10 @@ func TestStdinIngestion(t *testing.T) {
 		output := make(chan domain.LogEvent)
 
 		errChan := make(chan error)
-		stdin.Read(ctx, output, errChan)
+		shutdownMock := ports.NewMockIngestionShutdown(ctrl)
+		shutdownMock.EXPECT().OnShutdown().AnyTimes()
+
+		stdin.Read(ctx, output, errChan, shutdownMock)
 
 		err := <-errChan
 		assert.Error(t, err)

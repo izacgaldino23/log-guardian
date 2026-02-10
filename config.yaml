@@ -1,0 +1,6 @@
+stdin:
+  enabled: true
+file:
+  enabled: false
+unix:
+  enabled: false

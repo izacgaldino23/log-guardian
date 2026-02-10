@@ -82,3 +82,42 @@ func (mr *MockConnMockRecorder) SetReadDeadline(t any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetReadDeadline", reflect.TypeOf((*MockConn)(nil).SetReadDeadline), t)
 }
+
+// MockConnectionProvider is a mock of ConnectionProvider interface.
+type MockConnectionProvider struct {
+	ctrl     *gomock.Controller
+	recorder *MockConnectionProviderMockRecorder
+	isgomock struct{}
+}
+
+// MockConnectionProviderMockRecorder is the mock recorder for MockConnectionProvider.
+type MockConnectionProviderMockRecorder struct {
+	mock *MockConnectionProvider
+}
+
+// NewMockConnectionProvider creates a new mock instance.
+func NewMockConnectionProvider(ctrl *gomock.Controller) *MockConnectionProvider {
+	mock := &MockConnectionProvider{ctrl: ctrl}
+	mock.recorder = &MockConnectionProviderMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockConnectionProvider) EXPECT() *MockConnectionProviderMockRecorder {
+	return m.recorder
+}
+
+// DialTimeout mocks base method.
+func (m *MockConnectionProvider) DialTimeout(network, address string, timeout time.Duration) (Conn, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DialTimeout", network, address, timeout)
+	ret0, _ := ret[0].(Conn)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DialTimeout indicates an expected call of DialTimeout.
+func (mr *MockConnectionProviderMockRecorder) DialTimeout(network, address, timeout any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DialTimeout", reflect.TypeOf((*MockConnectionProvider)(nil).DialTimeout), network, address, timeout)
+}

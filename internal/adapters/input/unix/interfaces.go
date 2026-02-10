@@ -12,4 +12,6 @@ type Conn interface {
 	Read(b []byte) (n int, err error)
 }
 
-type ConnectionFactory func(network, address string, timeout time.Duration) (Conn, error)
+type ConnectionProvider interface {
+	DialTimeout(network, address string, timeout time.Duration) (Conn, error)
+}

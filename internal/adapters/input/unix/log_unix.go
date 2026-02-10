@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log-guardian/internal/core/domain"
+	"log-guardian/internal/core/ports"
 	"net"
 	"strings"
 	"time"
@@ -18,46 +19,47 @@ const (
 )
 
 type UnixIngestion struct {
-	socketPath        string
-	connectionFactory ConnectionFactory
-	timeout           time.Duration
-	idGen             domain.IDGenerator
-	maxMessageSize    int
+	socketPath         string
+	timeout            time.Duration
+	connectionProvider ConnectionProvider
+	idGen              domain.IDGenerator
+	maxMessageSize     int
 }
 
-func NewUnixIngestion(socketPath string, connFactory ConnectionFactory, timeout time.Duration, idGen domain.IDGenerator) *UnixIngestion {
-
+func NewUnixIngestion(connectionProvider ConnectionProvider, idGen domain.IDGenerator, socketPath string, timeout time.Duration) *UnixIngestion {
 	return &UnixIngestion{
-		socketPath:        socketPath,
-		timeout:           timeout,
-		connectionFactory: connFactory,
-		idGen:             idGen,
-		maxMessageSize:    1024 * 1024,
+		connectionProvider: connectionProvider,
+		idGen:              idGen,
+		maxMessageSize:     1024 * 1024,
+		socketPath:         socketPath,
+		timeout:            timeout,
 	}
 }
 
-func (u *UnixIngestion) Read(ctx context.Context, output chan<- domain.LogEvent, errChan chan<- error) {
-	conn, err := u.connectionFactory("unix", u.socketPath, u.timeout)
+func (u *UnixIngestion) Read(ctx context.Context, output chan<- domain.LogEvent, errChan chan<- error, shutdownCallback ports.IngestionShutdown) {
+	go func() {
+		<-ctx.Done()
+	}()
+
+	go func() {
+		defer shutdownCallback.OnShutdown()
+
+		u.Run(ctx, output, errChan)
+	}()
+}
+
+func (u *UnixIngestion) Run(ctx context.Context, output chan<- domain.LogEvent, errChan chan<- error) {
+	connection, err := u.connectionProvider.DialTimeout("unix", u.socketPath, u.timeout)
 	if err != nil {
 		u.SendError(ctx, err, errChan)
 		return
 	}
+	defer connection.Close()
 
-	go func() {
-		<-ctx.Done()
-		conn.Close()
-	}()
-
-	go u.Run(ctx, conn, output, errChan)
-}
-
-func (u *UnixIngestion) Run(ctx context.Context, conn Conn, output chan<- domain.LogEvent, errChan chan<- error) {
-	defer conn.Close()
-
-	reader := bufio.NewReaderSize(conn, initialBufSize)
+	reader := bufio.NewReaderSize(connection, initialBufSize)
 
 	for {
-		err := conn.SetReadDeadline(time.Now().Add(readDeadline))
+		err := connection.SetReadDeadline(time.Now().Add(readDeadline))
 		if err != nil {
 			u.SendError(ctx, err, errChan)
 			return
