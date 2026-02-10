@@ -3,47 +3,55 @@ package application
 import (
 	"context"
 	"fmt"
-	"io"
-	"log-guardian/internal/adapters/infra"
-	"log-guardian/internal/adapters/input/file"
-	"log-guardian/internal/adapters/input/stdin"
-	"log-guardian/internal/adapters/input/unix"
 	"log-guardian/internal/core/domain"
+	"log-guardian/internal/core/ports"
 	"os"
 	"os/signal"
 	"sync"
 	"syscall"
-	"time"
 )
 
 type orchestrator struct {
-	config          *domain.RuntimeConfig
-	idGen           domain.IDGenerator
-	wg              *sync.WaitGroup
-	shutdownTimeout time.Duration
-	ctx             context.Context
-	ctxCancel       context.CancelFunc
-	signal          chan os.Signal
-	Input           io.Reader
-	outputs         []domain.LogEvent
-	errors          []error
+	ingests struct {
+		stdin ports.InputProvider
+		file  ports.InputProvider
+		unix  ports.InputProvider
+	}
+	config    *domain.RuntimeConfig
+	wg        *sync.WaitGroup
+	once      sync.Once
+	ctx       context.Context
+	ctxCancel context.CancelFunc
+	signal    chan os.Signal
+	outputs   []domain.LogEvent
+	errors    []error
 }
 
-func NewOrchestrator(ctx context.Context, config *domain.RuntimeConfig, shutdownTimeout time.Duration) *orchestrator {
+func NewOrchestrator(
+	ctx context.Context,
+	config *domain.RuntimeConfig,
+	stdin ports.InputProvider,
+	file ports.InputProvider,
+	unix ports.InputProvider,
+) *orchestrator {
 	ctxWithCancel, cancel := context.WithCancel(ctx)
 
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)
 
-	return &orchestrator{
-		config:          config,
-		idGen:           infra.NewUUIDGenerator(),
-		wg:              &sync.WaitGroup{},
-		shutdownTimeout: shutdownTimeout,
-		ctx:             ctxWithCancel,
-		ctxCancel:       cancel,
-		signal:          signalChan,
+	orc := &orchestrator{
+		config:    config,
+		wg:        &sync.WaitGroup{},
+		ctx:       ctxWithCancel,
+		ctxCancel: cancel,
+		signal:    signalChan,
 	}
+
+	orc.ingests.stdin = stdin
+	orc.ingests.file = file
+	orc.ingests.unix = unix
+
+	return orc
 }
 
 func (o *orchestrator) Execute() {
@@ -84,60 +92,31 @@ outer:
 }
 
 func (o *orchestrator) watchStdin(output chan<- domain.LogEvent, errChan chan<- error) {
-	input := o.Input
-	if input == nil {
-		input = os.Stdin
+	if o.ingests.stdin != nil {
+		o.wg.Add(1)
+		o.ingests.stdin.Read(o.ctx, output, errChan, o)
 	}
-
-	stdinIngest := stdin.NewStdinIngestion(input, o.idGen)
-
-	o.wg.Add(1)
-	stdinIngest.Read(o.ctx, output, errChan, o)
 }
 
 func (o *orchestrator) watchFiles(output chan<- domain.LogEvent, errChan chan<- error) {
-	var fileIngest *file.LogFileIngestion
-	if len(o.config.Ingests.File.Folders) > 0 {
-		// TODO: support for folders
-		// TODO: support for ignore files
-		// running only on the first index
-
-		watcherProvider := file.WatcherProvider{}
-		fileOpener := file.OSFileSystem{}
-
-		fileWatcher, err := watcherProvider.Create()
-		if err != nil {
-			errChan <- err
-			return
-		}
-
-		fileIngest = file.NewLogFileIngestion(o.config.Ingests.File.Folders[0].FolderPath, fileWatcher, fileOpener, o.idGen)
-
+	if o.ingests.file != nil {
 		o.wg.Add(1)
-		fileIngest.Read(o.ctx, output, errChan, o)
+		o.ingests.file.Read(o.ctx, output, errChan, o)
 	}
 }
 
 func (o *orchestrator) watchUnix(output chan<- domain.LogEvent, errChan chan<- error) {
-	var unixIngest *unix.UnixIngestion
-	if len(o.config.Ingests.Unix.Sockets) > 0 {
-		// TODO: support for many connections
-		// running only on the first index
-		socket := o.config.Ingests.Unix.Sockets[0]
-		duration := time.Duration(socket.Timeout) * time.Millisecond
-
-		connectionProvider := unix.NewUnixConnectionProvider()
-
-		unixIngest = unix.NewUnixIngestion(connectionProvider, o.idGen, socket.Address, duration)
-
+	if o.ingests.unix != nil {
 		o.wg.Add(1)
-		unixIngest.Read(o.ctx, output, errChan, o)
+		o.ingests.unix.Read(o.ctx, output, errChan, o)
 	}
 }
 
 func (o *orchestrator) Shutdown() {
-	o.ctxCancel()
-	o.wg.Wait()
+	o.once.Do(func() {
+		o.ctxCancel()
+		o.wg.Wait()
+	})
 }
 
 func (s *orchestrator) OnShutdown() {

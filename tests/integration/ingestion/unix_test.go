@@ -4,6 +4,8 @@ package ingestion_test
 
 import (
 	"context"
+	"log-guardian/internal/adapters/infra"
+	"log-guardian/internal/adapters/input/unix"
 	"log-guardian/internal/core/application"
 	"log-guardian/internal/core/domain"
 	"net"
@@ -92,8 +94,16 @@ func TestUnixSocketIngestion(t *testing.T) {
 				},
 			}
 
+			socket := config.Ingests.Unix.Sockets[0]
+			duration := time.Duration(socket.Timeout) * time.Millisecond
+
+			connectionProvider := unix.NewUnixConnectionProvider()
+
+			idGen := infra.NewUUIDGenerator()
+			unixIngest := unix.NewUnixIngestion(connectionProvider, idGen, socket.Address, duration)
+
 			ctx, cancel := context.WithCancel(context.Background())
-			orc := application.NewOrchestrator(ctx, config, 1*time.Second)
+			orc := application.NewOrchestrator(ctx, config, nil, nil, unixIngest)
 
 			go orc.Execute()
 

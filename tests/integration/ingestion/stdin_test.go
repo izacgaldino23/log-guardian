@@ -5,6 +5,8 @@ package ingestion_test
 import (
 	"context"
 	"io"
+	"log-guardian/internal/adapters/infra"
+	"log-guardian/internal/adapters/input/stdin"
 	"log-guardian/internal/core/application"
 	"log-guardian/internal/core/domain"
 	"testing"
@@ -65,8 +67,12 @@ func TestStdinIngestion(t *testing.T) {
 			pr, pw := io.Pipe()
 			ctx, cancel := context.WithCancel(context.Background())
 
-			orc := application.NewOrchestrator(ctx, config, 5*time.Second)
-			orc.Input = pr
+			idGen := infra.NewUUIDGenerator()
+
+			// stdin
+			stdinIngest := stdin.NewStdinIngestion(pr, idGen)
+
+			orc := application.NewOrchestrator(ctx, config, stdinIngest, nil, nil)
 
 			go func() {
 				orc.Execute()
